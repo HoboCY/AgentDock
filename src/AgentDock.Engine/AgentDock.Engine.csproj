@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AgentDock.Engine</RootNamespace>
+    <AssemblyName>AgentDock.Engine</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\AgentDock.Core\AgentDock.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\opencode_pipe_compat.cjs" />
+    <EmbeddedResource Include="Resources\opencode_pipe_reader.cjs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AgentDock.Engine.Tests" />
+  </ItemGroup>
+
+</Project>

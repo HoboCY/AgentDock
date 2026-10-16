@@ -1,0 +1,180 @@
+name: package
+
+# 打包与自检工作流：
+# - windows-package：测试源码并生成完整 win-x64 安装包。
+# - plugin-probe-selftest：手动触发，验证 Codex 插件接入探针链路（需要 runner 上有 Codex CLI）。
+# - macos-recipe：手动触发的 macOS 配方，产物明确标记未签名/未验证，不作为正式发布。
+# 本工作流不创建 Release、不上传密钥、不发布任何公开制品。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '*.props'
+      - '*.json'
+      - '*.slnx'
+      - 'NuGet.Config'
+      - 'packaging/**'
+      - 'scripts/**'
+      - '.github/workflows/package.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '*.props'
+      - '*.json'
+      - '*.slnx'
+      - 'NuGet.Config'
+      - 'packaging/**'
+      - 'scripts/**'
+      - '.github/workflows/package.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '包版本（默认 0.0.0-ci.<run_number>）'
+        required: false
+        type: string
+      run_probe:
+        description: '运行插件探针自检（需要 runner 已安装 Codex CLI 0.162+）'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERSION: ${{ inputs.version != '' && inputs.version || format('0.0.0-ci.{0}', github.run_number) }}
+
+jobs:
+  windows-package:
+    name: Windows 安装包（win-x64）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 自动化回归（真实执行器探针另需固定运行时）
+        shell: pwsh
+        run: |
+          dotnet test AgentDock.slnx -c Release -m:1 --disable-build-servers --nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 生成完整安装包
+        shell: pwsh
+        run: ./scripts/Build-Package.ps1 -Version "$env:VERSION" -PayloadFormat zip -ExpectedHostVersion "$env:VERSION"
+
+      - name: 校验包清单与内置 Git 哈希
+        shell: pwsh
+        run: |
+          $manifestPath = Get-ChildItem artifacts/package -Recurse -Filter package-manifest.json | Select-Object -First 1
+          if (-not $manifestPath) { throw 'package-manifest.json 不存在。' }
+          $manifest = Get-Content -Raw $manifestPath.FullName | ConvertFrom-Json
+          Write-Host ("版本 {0}；partial={1}；releaseReady={2}；artifacts={3}" -f $manifest.version, $manifest.partial, $manifest.releaseReady, (($manifest.artifacts.PSObject.Properties.Name) -join ','))
+          if ($manifest.partial) {
+            Write-Host "::warning::当前为 partial 包（缺少组件：$($manifest.missingComponents -join ', ')）；完整发行前必须补齐 Host/Desktop/Engine。"
+          }
+          $lock = Get-Content -Raw packaging/runtime-lock.json | ConvertFrom-Json
+          $git = $lock.platforms.'win-x64'.runtimes.'git-bash'
+          if ($git.kind -ne 'zip' -or -not $git.archive) { throw 'runtime-lock git-bash 必须是随包分发的 zip 运行时。' }
+          $shSpec = @($git.verify) | Where-Object { $_.path -eq 'usr/bin/sh.exe' } | Select-Object -First 1
+          if (-not $manifest.git) { throw 'package-manifest 缺少内置 Git 信息。' }
+          if (([string]$manifest.git.archiveSha256).ToLowerInvariant() -ne ([string]$git.archive.sha256).ToLowerInvariant()) {
+            throw "package-manifest Git 归档哈希与 runtime-lock 不符：$($manifest.git.archiveSha256)"
+          }
+          if ($shSpec -and ([string]$manifest.git.shExeSha256).ToLowerInvariant() -ne ([string]$shSpec.sha256).ToLowerInvariant()) {
+            throw "package-manifest sh.exe 哈希与 runtime-lock 不符：$($manifest.git.shExeSha256)"
+          }
+          Write-Host ("Host 版本 {0}；Git {1}（archive={2}… sh.exe={3}…，{4} 个文件）" -f $manifest.hostVersion, $manifest.git.version, (([string]$manifest.git.archiveSha256).Substring(0,12)), (([string]$manifest.git.shExeSha256).Substring(0,12)), $manifest.git.fileCount)
+
+      - name: 安装程序门禁自测（隔离 --root，真实 Windows）
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem artifacts/package -Recurse -Filter 'AgentDockSetup-*-win-x64.exe' | Select-Object -First 1
+          $payload = Get-ChildItem artifacts/package -Recurse -Filter 'AgentDock-*-win-x64.zip' | Select-Object -First 1
+          if (-not $setup) { throw '未找到安装程序。' }
+          if (-not $payload) { throw '未找到 payload zip。' }
+          $hostExe = Join-Path $env:RUNNER_TEMP 'agentdock-gate-host/AgentDock.Host.exe'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $hostExe) -Force | Out-Null
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($payload.FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -eq 'host/AgentDock.Host.exe' } | Select-Object -First 1
+            if ($entry) { [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $hostExe, $true) }
+          } finally { $zip.Dispose() }
+          $gateArgs = @{ SetupExe = $setup.FullName; Payload = $payload.FullName }
+          if (Test-Path -LiteralPath $hostExe) { $gateArgs.HostExe = $hostExe }
+          & ./scripts/Test-SetupGates.ps1 @gateArgs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentdock-win-x64-${{ github.run_number }}
+          path: artifacts/package/**
+          if-no-files-found: error
+          retention-days: 14
+
+  plugin-probe-selftest:
+    name: 插件探针自检
+    if: github.event_name == 'workflow_dispatch' && inputs.run_probe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检测 Codex CLI
+        id: codex
+        shell: pwsh
+        run: |
+          if (Get-Command codex -ErrorAction SilentlyContinue) {
+            "available=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "available=false" >> $env:GITHUB_OUTPUT
+            Write-Host '::warning::runner 未安装 Codex CLI 0.162+，跳过插件探针。真实接入验收需在装有 Codex 的机器上运行 scripts/Probe-Plugin.ps1 -SelfTest。'
+          }
+
+      - name: 运行探针自检
+        if: steps.codex.outputs.available == 'true'
+        shell: pwsh
+        run: ./scripts/Probe-Plugin.ps1 -SelfTest -OutFile probe-result.json
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.codex.outputs.available == 'true' }}
+        with:
+          name: plugin-probe-result-${{ github.run_number }}
+          path: probe-result.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  macos-recipe:
+    name: macOS 配方（未签名 / 未验证，禁止作为正式发布）
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 交叉发布 osx-arm64 配方
+        shell: pwsh
+        run: ./scripts/Build-Package.ps1 -Version "$env:VERSION-unsig" -Runtime osx-arm64 -AllowPartial -PayloadFormat zip
+
+      - name: 明确标注未验证
+        shell: pwsh
+        run: Write-Host '::warning::macOS 配方未签名、未经真实设备验收，仅用于准备发布流程，不得作为正式支持发布。'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-UNSIGNED-UNVALIDATED-${{ github.run_number }}
+          path: artifacts/package/**
+          if-no-files-found: error
+          retention-days: 14

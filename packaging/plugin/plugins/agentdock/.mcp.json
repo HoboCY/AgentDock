@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agentdock": {
+      "command": "./runtime/AgentDock.Host.exe",
+      "args": [
+        "--mcp"
+      ],
+      "cwd": "./"
+    }
+  }
+}

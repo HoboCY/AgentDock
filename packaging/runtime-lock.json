@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "product": "AgentDock",
+  "channel": "v1",
+  "note": "桌面与执行引擎按此清单固定版本组合。官方来源、哈希与体积均先行核对；Fetch-Runtimes.ps1 只复制/解包清单允许的内容，绝不读取或打包任何个人配置、凭据或任务数据。Git（MinGit）必须随包分发，干净系统无需预装任何开发环境。",
+  "platforms": {
+    "win-x64": {
+      "runtimes": {
+        "opencode": {
+          "kind": "npm",
+          "displayName": "OpenCode",
+          "required": true,
+          "version": "1.18.30",
+          "license": "MIT",
+          "homepage": "https://opencode.ai/",
+          "npmPackage": "opencode-windows-x64",
+          "npmVersion": "1.18.30",
+          "tarball": "https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.18.30.tgz",
+          "integrity": "sha512-E00yRyUDQvdmf8AYQNYDYgZuLkWW0mBqBrACHPwfCCBZdyC8Sa4nUtQq27nAIOPAp2jfyrpH3WJBxT2GVpT42w==",
+          "localRoots": [
+            "%USERPROFILE%/.codex/mcp/deepseek-agents/tools/opencode-1.18.30"
+          ],
+          "files": [
+            {
+              "to": "engines/opencode/opencode.exe",
+              "sha256": "c1bdbb18767048e1853af4238311b3f7e16ff2f91b68fb4c7ced3c5175347eea",
+              "size": 179793448,
+              "sources": [
+                { "local": "node_modules/opencode-windows-x64/bin/opencode.exe" },
+                { "npmPath": "bin/opencode.exe" }
+              ]
+            }
+          ]
+        },
+        "codex-sandbox": {
+          "kind": "npm",
+          "displayName": "Codex sandbox runtime",
+          "required": true,
+          "version": "0.153.4",
+          "license": "Apache-2.0",
+          "homepage": "https://github.com/openai/codex",
+          "npmPackage": "@openai/codex",
+          "npmVersion": "0.153.4-win32-x64",
+          "tarball": "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-win32-x64.tgz",
+          "integrity": "sha512-lMkB43kJZH0VFr+hoXc11qqR7QtQIbkr07ALgj4urKL1osNyUyuy1iXd3Vzz2iCYvBUCSw7I0l/W1cEPGx9euQ==",
+          "localRoots": [
+            "%USERPROFILE%/.codex/mcp/deepseek-agents/tools/codex-0.153.4"
+          ],
+          "files": [
+            {
+              "to": "engines/codex/codex-package.json",
+              "sha256": "58aa5bc41fd09632f76a1bf63a711ab0fe18c80630bcd71538bfe40e4db1b502",
+              "size": 215,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-package.json" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/codex-package.json" }
+              ]
+            },
+            {
+              "to": "engines/codex/bin/codex.exe",
+              "sha256": "444a3f0008050605cae73cd9b7a2dcac61294062dfaab56dd20430fd6498518b",
+              "size": 295408944,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/bin/codex.exe" }
+              ]
+            },
+            {
+              "to": "engines/codex/bin/codex-code-mode-host.exe",
+              "sha256": "deaebc21f354f151fcebeac46e12c6e8c4ef75ee448e25e3577502074e04b8d9",
+              "size": 72475952,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex-code-mode-host.exe" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/bin/codex-code-mode-host.exe" }
+              ]
+            },
+            {
+              "to": "engines/codex/codex-path/rg.exe",
+              "sha256": "14231169855ec5205cf5a1b6f1db358ff4aed4247c86b69ce8aae647c77f6680",
+              "size": 4218880,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-path/rg.exe" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/codex-path/rg.exe" }
+              ]
+            },
+            {
+              "to": "engines/codex/codex-resources/codex-command-runner.exe",
+              "sha256": "3eb267dc1f0d1d80efeacc26a211f26ed0f414466d32a2aa7304a8a0beec170c",
+              "size": 8204592,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-resources/codex-command-runner.exe" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/codex-resources/codex-command-runner.exe" }
+              ]
+            },
+            {
+              "to": "engines/codex/codex-resources/codex-windows-sandbox-setup.exe",
+              "sha256": "0c3eeb7cee8d2bc4c8644def3c818e8b06760979572dcedc919c38d0f38f64c4",
+              "size": 15413040,
+              "sources": [
+                { "local": "node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-resources/codex-windows-sandbox-setup.exe" },
+                { "npmPath": "vendor/x86_64-pc-windows-msvc/codex-resources/codex-windows-sandbox-setup.exe" }
+              ]
+            }
+          ]
+        },
+        "git-bash": {
+          "kind": "zip",
+          "displayName": "MinGit (Git for Windows minimal)",
+          "required": true,
+          "version": "2.56.0.2",
+          "upstreamRelease": "v2.56.0.windows.2",
+          "license": "GPL-2.0-only（Git 本体）；包内 usr/share/licenses 与 ucrt64/share/licenses 保留各依赖许可证",
+          "homepage": "https://gitforwindows.org/",
+          "note": "整个官方 MinGit 归档原样解包到 engines/git；Host 默认使用 engines/git/usr/bin/sh.exe（GNU Bash）作为 shell，干净系统无需另装 Git。",
+          "to": "engines/git",
+          "archive": {
+            "fileName": "MinGit-2.56.0.2-64-bit.zip",
+            "url": "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/MinGit-2.56.0.2-64-bit.zip",
+            "sha256": "da35e72aa21c005a5a0d298cfbae110bc1609a815730ea0dde84b01a1b3cd3be",
+            "size": 39806486
+          },
+          "verify": [
+            {
+              "path": "usr/bin/sh.exe",
+              "sha256": "5490d0da5e7cf9d92068cc48fcc590f2bcf8564add8ff91c3b5fe541eb2d72e3",
+              "note": "GNU Bash 5.3.15；Host PackageDefaults 与 OpenCode setup 使用的 shell 文件名 sh"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

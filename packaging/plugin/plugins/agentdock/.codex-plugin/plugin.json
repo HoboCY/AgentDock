@@ -1,0 +1,6 @@
+{
+  "name": "agentdock",
+  "version": "0.0.0",
+  "description": "AgentDock 接入插件：把 Codex 与已安装的 AgentDock 桌面运行环境连接起来。",
+  "mcpServers": "./.mcp.json"
+}

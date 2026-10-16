@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AgentDock.Core/AgentDock.Core.csproj" />
+    <Project Path="src/AgentDock.Engine/AgentDock.Engine.csproj" />
+    <Project Path="src/AgentDock.Host/AgentDock.Host.csproj" />
+    <Project Path="src/AgentDock.Desktop/AgentDock.Desktop.csproj" />
+    <Project Path="src/AgentDock.Setup/AgentDock.Setup.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgentDock.Tests/AgentDock.Tests.csproj" />
+    <Project Path="tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj" />
+  </Folder>
+</Solution>
