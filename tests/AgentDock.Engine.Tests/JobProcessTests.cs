@@ -47,7 +47,7 @@ public sealed class JobProcessTests : IDisposable
         return [.. lines];
     }
 
-    [Fact]
+    [WindowsJobFact]
     public void MissingProjectIsNotRecreated()
     {
         var missing = Path.Combine(_work, "removed-project");
@@ -55,7 +55,7 @@ public sealed class JobProcessTests : IDisposable
         Assert.False(Directory.Exists(missing));
     }
 
-    [Fact]
+    [WindowsJobFact]
     public void RunsCommandWithPipesAndPreservesExitCode()
     {
         using var process = JobProcess.Start(_cmd, ["/c", "echo hello-job & exit /b 7"], _work, ParentEnvironment());
@@ -65,7 +65,7 @@ public sealed class JobProcessTests : IDisposable
         Assert.Contains(lines, line => line.Contains("hello-job", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [WindowsJobFact]
     public void StandardInputReachesTheChild()
     {
         using var process = JobProcess.Start(_cmd, ["/c", "findstr ."], _work, ParentEnvironment());
@@ -77,7 +77,7 @@ public sealed class JobProcessTests : IDisposable
         Assert.Contains(lines, line => line.Contains("stdin-payload", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [WindowsJobFact]
     public void TerminateKillsTheWholeProcessTreeIncludingLateChildren()
     {
         var pwsh = FindPwsh();
@@ -85,7 +85,8 @@ public sealed class JobProcessTests : IDisposable
         var ping = Path.Combine(Environment.SystemDirectory, "ping.exe");
         var pidFile = Path.Combine(_work, "child.pid");
         var script = $"$p = Start-Process -FilePath '{ping}' -ArgumentList '-n','120','127.0.0.1' " +
-                     $"-PassThru -WindowStyle Hidden; $p.Id | Out-File -Encoding ascii '{pidFile}'; Start-Sleep -Seconds 120";
+                     $"-PassThru -WindowStyle Hidden; $p.Id | Out-File -Encoding ascii '{pidFile}.tmp'; " +
+                     $"Move-Item -LiteralPath '{pidFile}.tmp' -Destination '{pidFile}'; Start-Sleep -Seconds 120";
         using var process = JobProcess.Start(pwsh!, ["-NoProfile", "-NonInteractive", "-Command", script], _work,
             ParentEnvironment());
         var deadline = DateTime.UtcNow.AddSeconds(30);
@@ -109,7 +110,7 @@ public sealed class JobProcessTests : IDisposable
         Assert.False(IsRunning(childPid), "the late child survived job termination");
     }
 
-    [Fact]
+    [WindowsJobFact]
     public void DisposingWithoutTerminateStillKillsTheTree()
     {
         var pwsh = FindPwsh();
@@ -117,8 +118,9 @@ public sealed class JobProcessTests : IDisposable
         var ping = Path.Combine(Environment.SystemDirectory, "ping.exe");
         var pidFile = Path.Combine(_work, "child2.pid");
         var script = $"$p = Start-Process -FilePath '{ping}' -ArgumentList '-n','120','127.0.0.1' " +
-                     $"-PassThru -WindowStyle Hidden; $p.Id | Out-File -Encoding ascii '{pidFile}'; Start-Sleep -Seconds 120";
-        var process = JobProcess.Start(pwsh!, ["-NoProfile", "-NonInteractive", "-Command", script], _work,
+                     $"-PassThru -WindowStyle Hidden; $p.Id | Out-File -Encoding ascii '{pidFile}.tmp'; " +
+                     $"Move-Item -LiteralPath '{pidFile}.tmp' -Destination '{pidFile}'; Start-Sleep -Seconds 120";
+        using var process = JobProcess.Start(pwsh!, ["-NoProfile", "-NonInteractive", "-Command", script], _work,
             ParentEnvironment());
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (!File.Exists(pidFile) && DateTime.UtcNow < deadline)
@@ -169,4 +171,9 @@ public sealed class JobProcessTests : IDisposable
         }
         return null;
     }
+}
+
+public sealed class WindowsJobFactAttribute : FactAttribute
+{
+    public WindowsJobFactAttribute() { if (!OperatingSystem.IsWindows()) Skip = "Requires Windows Job Objects."; }
 }

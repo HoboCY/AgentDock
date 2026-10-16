@@ -15,7 +15,7 @@ namespace AgentDock.Engine;
 /// PROC_THREAD_ATTRIBUTE_HANDLE_LIST); no other inheritable handle leaks into
 /// the child.
 /// </summary>
-internal sealed class JobProcess : IDisposable
+internal sealed class JobProcess : IJobProcess
 {
     public const int MaxLineBytes = 4 * 1024 * 1024;
 
@@ -48,11 +48,11 @@ internal sealed class JobProcess : IDisposable
         Stderr = stderr;
     }
 
-    public FileStream Stdin { get; }
+    public Stream Stdin { get; }
 
-    public FileStream Stdout { get; }
+    public Stream Stdout { get; }
 
-    public FileStream Stderr { get; }
+    public Stream Stderr { get; }
 
     public bool HasExited => WaitForSingleObject(_processHandle, 0) == WaitObject0;
 

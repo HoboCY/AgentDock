@@ -44,7 +44,7 @@ public sealed class MainWindow : Window
     private readonly Dictionary<string, TextBox> _rolePrompts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NumericUpDown> _roleTimeouts = new(StringComparer.Ordinal);
     private readonly CheckBox _notifyCompletion = new() { Content = "普通任务完成时也通知（默认关闭；失败、中断和凭据问题始终通知）" };
-    private readonly CheckBox _startAtLogin = new() { Content = "登录 Windows 时启动 AgentDock（默认关闭）" };
+    private readonly CheckBox _startAtLogin = new() { Content = "登录系统时启动 AgentDock（默认关闭）" };
     private readonly CheckBox _overlayTopmost = new() { Content = "悬浮窗置顶" };
     private readonly Slider _overlayOpacity = new() { Minimum = .3, Maximum = 1, Width = 260, Value = .88, TickFrequency = .05, IsSnapToTickEnabled = true };
     private readonly TextBlock _opacityText = new() { VerticalAlignment = VerticalAlignment.Center, FontSize = 12.5 };
@@ -567,8 +567,10 @@ public sealed class MainWindow : Window
         return grid;
     }
 
-    private static Control BuildTaskRow(TaskSummary task)
+    private static Control? BuildTaskRow(TaskSummary? task)
     {
+        // Avalonia clears recycled list containers by rebuilding their template with null.
+        if (task is null) return null;
         var grid = TaskRowGrid();
         var values = new[]
         {

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- macOS 独立安装/启动器：net10.0 自包含 apphost，不链接任何 Windows 桌面组件（无 WinForms）。 -->
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AgentDock</AssemblyName>
+    <RootNamespace>AgentDock.MacSetup</RootNamespace>
+    <!-- 产品版本；Build-MacPackage.py 用 -p:Version=<包版本> 覆盖。 -->
+    <Version>0.1.0</Version>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentDock.Core\AgentDock.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    与 Windows 安装程序编译同一份门禁/载荷/布局源码（Compile Link），保证
+    更新标记、launch.lock、离线任务检查和 payload 校验的行为完全一致；
+    不链接 WinForms/Cli/Installer/ShellIntegration/MachineProbe 等 Windows 专属文件。
+  -->
+  <ItemGroup>
+    <Compile Include="..\AgentDock.Setup\OperationGate.cs" Link="Shared\OperationGate.cs" />
+    <Compile Include="..\AgentDock.Setup\HostControl.cs" Link="Shared\HostControl.cs" />
+    <Compile Include="..\AgentDock.Setup\Payload.cs" Link="Shared\Payload.cs" />
+    <Compile Include="..\AgentDock.Setup\Models.cs" Link="Shared\Models.cs" />
+    <Compile Include="..\AgentDock.Setup\InstallLayout.cs" Link="Shared\InstallLayout.cs" />
+  </ItemGroup>
+
+</Project>

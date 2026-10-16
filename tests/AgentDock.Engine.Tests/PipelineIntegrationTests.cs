@@ -15,6 +15,7 @@ public sealed class PipelineFactAttribute : FactAttribute
 {
     public PipelineFactAttribute()
     {
+        if (!OperatingSystem.IsWindows()) { Skip = "Windows runner fixtures; MacExecutionTests cover macOS."; return; }
         if (Environment.GetEnvironmentVariable("AGENTDOCK_TEST_OPENCODE") is null ||
             Environment.GetEnvironmentVariable("AGENTDOCK_TEST_SANDBOX") is null ||
             Environment.GetEnvironmentVariable("AGENTDOCK_TEST_SHELL") is null)

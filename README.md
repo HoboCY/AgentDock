@@ -1,18 +1,18 @@
 # AgentDock
 
-面向 Codex 外部子代理的 Windows 桌面控制台。任务由 Codex 派发；主面板、托盘和透明悬浮窗用于配置、监控、查看结果和停止任务。
+面向 Codex 外部子代理的 Windows / macOS 桌面控制台。任务由 Codex 派发；主面板、托盘和透明悬浮窗用于配置、监控、查看结果和停止任务。
 
-实现基线：[Issue #1](https://github.com/HoboCY/AgentDock/issues/1)。当前交付状态及未通过的验收项见 [验收矩阵](docs/validation/acceptance.md)。macOS 尚未通过真实设备验收，不声明正式支持。
+实现基线：[Issue #1](https://github.com/HoboCY/AgentDock/issues/1)。两平台本地安装包和五角色真实账户链路已验证；完整记录及发行缺口见 [验收矩阵](docs/validation/acceptance.md) 和 [Mac 记录](docs/validation/macos.md)。当前为本地候选，尚不声明发行就绪。
 
 ## 安装与使用
 
-见 [安装说明](docs/installation.md)。Windows 包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 MinGit；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在主面板独立配置，不迁移既有 MCP 凭据或角色。
+见 [Windows 安装说明](docs/installation.md) 和 [Mac 安装说明](packaging/mac/README.md)。包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 Git；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在各设备主面板独立配置，不迁移既有 MCP 凭据或角色。
 
 默认全局并发 4；同项目及父子项目的写任务串行。关闭窗口不会停止任务，重连不会重跑。完全退出是独立操作。后台异常退出后，已运行任务中断，队列暂停；Codex 需明确决定后续执行。
 
 ## 开发
 
-需要 Windows 和 .NET 10 SDK（`global.json` 指定版本系列）。
+需要 .NET 10 SDK（`global.json` 指定版本系列）。Windows 构建与检查如下；Mac 构建及本机测试开关见 [Mac 说明](packaging/mac/README.md)。
 
 ```powershell
 dotnet restore AgentDock.slnx --configfile NuGet.Config

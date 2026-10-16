@@ -12,7 +12,7 @@
 - 生成速度只统计上游 SSE 中真实输出/推理增量到结束用量之间的单调时间（JSON 解析，容忍空白、跨分块与 CRLF；工具调用增量不启动窗口）；排队与工具执行时间不计入；分块同时携带首个增量与 usage、窗口无法可靠闭合时返回 null，不用任务总耗时冒充。
 - 成功判定唯一：终端 `step_finish.reason == "stop"` + 退出码 0 + 无终端错误。
 - 任务前后对项目做有界 SHA-256 快照，返回可核实变更；取消/失败也尽量返回已产生变更与最终文本，并附归因免责声明。
-- Windows 为当前唯一启用平台；macOS 在真实设备契约验证前 fail closed（引擎与凭据存储均明确报错）。
+- Windows 与 macOS arm64 执行后端已启用并分别实测；其他平台 fail closed。Mac 安装、账户与发行门槛另见 [macos.md](macos.md)，不以单项后端测试替代完整发行验收。
 
 ## 2. 公开接口与文件
 
@@ -40,7 +40,7 @@
 
 | 条件 | Code |
 | --- | --- |
-| 非 Windows | `platform-unsupported` |
+| 非 Windows / macOS | `platform-unsupported` |
 | `EnginePath` 缺失/非绝对 | `engine-missing` |
 | `SandboxPath` 缺失/非绝对 | `sandbox-missing` |
 | `ShellPath` 缺失/非绝对 | `shell-missing` |
@@ -59,7 +59,7 @@
 
 - `CredentialVault.Set/Read`：Windows 使用 DPAPI（CurrentUser）写入 `<home>/opencode-go.key.dpapi`；仅存保护后的二进制，`IsConfigured` 反映文件存在。键值必须为单一非空白 token，否则 `credential-invalid`；解密失败同样 `credential-invalid`。`Set` 先写同目录临时文件并 flush，再原子替换目标文件（崩溃不会留下截断凭据），不残留临时文件。
 - DPAPI CurrentUser 只提供跨用户与离线保护，**不是同一用户进程之间的读隔离**：任何以该用户运行的代码（包括 unelevated 沙箱内的代码）都能对文件调用 `CryptUnprotectData`。沙箱文件系统映射中的 `:root = read` 是受支持的 unelevated 策略所必需，不是凭据保密边界；对恶意同用户代码不承诺凭据不可读。管理端命名管道已由 `IsTokenRestricted` 约束（父工程职责）。
-- macOS：`Set`/`Read` 抛 `credential-platform-unsupported`，等待 OS 契约验证；不做 Keychain 的未验证实现。
+- macOS：使用 Security.framework 的 Generic Password，service 为 `AgentDock.OpenCodeGo`，account 为数据目录实际规范路径；关闭同步。`IsConfigured` 只读属性；读写真实键只在 Host 进程内完成。Host 由登录桌面的 launchd GUI 域按需启动，SSH 会话不直接访问登录 Keychain。凭据不能从 Windows DPAPI 或旧 MCP 迁移。
 - 引擎每次执行调用 `getCredential()`；真实键只进入 Relay 内存与上游 `Authorization` 头。任务级能力令牌只写入沙箱内 `opencode.json`（`provider.opencode-go.options.apiKey`），随任务结束失效；所有外发事件文本与错误经 `[redacted]` 清洗。
 - 不迁移、不读取旧 deepseek-agents 的凭据或配置；不自动接管旧 MCP。
 
@@ -73,7 +73,7 @@
 
 角色的 OpenCode 自身权限配置与 OS 映射共同生效，且提示词无法改变：见下表。
 
-## 6. 权限矩阵（Windows）
+## 6. 权限矩阵（Windows / macOS）
 
 | 角色 | 项目目录 | OpenCode `edit` | 其他可写位置 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -142,13 +142,13 @@
 | 平台 | 状态 |
 | --- | --- |
 | Windows x64 | 已在普通 Windows 会话执行真实 OS 权限、写入、取消和 verifier 构建探针 |
-| macOS | fail closed：引擎 `platform-unsupported`、凭据 `credential-platform-unsupported`；未经真实设备验证不启用 |
+| macOS | launchd 独立 coalition + audit-token 信号；Host/看门进程失联收敛任务树；Keychain；实际权限与停止证据见 macos.md |
 
 ## 13. 验证记录（2026-10-16，Windows，.NET SDK 10.0.401）
 
 固定工具版本：OpenCode 1.18.30、Codex sandbox 0.153.4、MinGit 2.56.0.2。包内程序逐文件校验，工具版本由引擎预检。
 
-最终全量回归：Engine 89 项、Core/Host/Desktop 24 项，共 113 项通过，0 失败、0 跳过。真实 OpenCode CLI 连接本地脚本化模型，验证工具落盘、usage 去重/修订、凭据回显脱敏、取消保留改动与子进程释放。此证据不代表真实 OpenCode Go 账户验收。
+初始 Windows 全量回归 113 项通过；Mac 扩展后的最终 Windows 回归为 Engine 89 项、Core/Host 25 项，共 114 项通过、19 项 Mac 专属用例跳过。真实 OpenCode CLI 连接本地脚本化模型，验证工具落盘、usage 去重/修订、凭据回显脱敏、取消保留改动与子进程释放。真实 Go 账户另行验收，不与这些脚本化模型测试混为一项证据。
 
 安装包布局的五项真实 Windows 沙箱测试通过：explorer 不能写项目或相邻目录；runtime 可写且无继承密钥；verifier 将检查产物重定向到专属目录；只读项目实际构建并执行；writer 文件哈希观察与取消进程树。沙箱内 single-file runner 使用专属 TEMP 与 DOTNET_BUNDLE_EXTRACT_BASE_DIR，避免向受保护系统临时目录解包。
 
@@ -168,11 +168,11 @@ dotnet test AgentDock.slnx -m:1 --disable-build-servers --logger trx
 ## 14. 外部验收与能力边界
 
 1. **真实账户与字段**：用户已在主面板独立配置 OpenCode Go 凭据，五角色真实最小任务、实际 input/output 和可观测生成速度均通过（见 acceptance.md）。未读取或迁移旧 MCP 凭据；上游分量与账单逐项对照、复杂 compaction 的生成归属仍需更多样本。
-2. **macOS**：执行与凭据后端未实现并保持 fail closed。需真实 Mac 上完成权限、进程清理、Keychain、桌面与发行验证（#12）。
+2. **macOS**：后端、权限、进程清理、Keychain、桌面、完整安装、升级卸载与插件真实账户链路已实测；签名、公证和 Gatekeeper 发行门槛按 #12 保留。
 3. **生成归属**：按连续成功模型响应关联 usage；请求序列跳跃或时段无法观测时返回 null，不用任务总耗时填补。
 4. **检查产物**：宿主正文清理同时移除对应产物；另设单任务 64 MiB、全局 50 目录/256 MiB 上限，超限可提前清理。被占用的路径按尽力而为处理。
 5. **凭据边界**：DPAPI CurrentUser 不构成对恶意同用户代码的读隔离（§4）；受限任务不能使用后台管理管道。此边界必须保留，不能表述为全面保密沙箱。
-6. **资源**：UI/Host 空闲指标与执行引擎运行负载分别统计；尚无真实账户四任务并发资源样本。
+6. **资源**：UI/Host 空闲指标与执行引擎负载分别统计；两平台真实账户四任务并发样本见 acceptance.md 和 macos.md，不能将单次采样当作资源上限。
 ## 15. 与 #3 验收标准的对应
 
 | #3 验收点 | 落地 |
@@ -181,5 +181,5 @@ dotnet test AgentDock.slnx -m:1 --disable-build-servers --logger trx
 | 提示词不能突破只读；verifier 产物边界；Windows/macOS 状态 | §6、§12；集成测试 explorer 拒绝写入 |
 | 用量不重复累计、未知保持未知、输出含推理、速度排除排队/工具 | §7；`OpenCodeEventAdapterTests`、`UsageIntegrationTests`、`GenerationTimerTests`、`GoRelayTests.GenerationTiming…` |
 | 无生成时段时返回不可用 | `GenerationSeconds = null`（§7） |
-| 仅测试项目与脱敏证据、无凭据输出、不改旧 MCP | 全部测试使用假键与假模型；`ExecutionSetupTests`、`CredentialVaultTests` 断言无明文键 |
-| 角色操作矩阵与 verifier 产物位置、存在执行层约束点 | §6 矩阵；Windows OS 权限已实测，macOS 仍未通过 |
+| 仅测试项目与脱敏证据、无凭据输出、不改旧 MCP | 自动化权限测试使用合成键和本地模型，独立账户验收也只使用合成项目；`ExecutionSetupTests`、`CredentialVaultTests` 断言无明文键 |
+| 角色操作矩阵与 verifier 产物位置、存在执行层约束点 | §6 矩阵；Windows 与 macOS OS 权限分别实测 |

@@ -31,6 +31,8 @@ public static class Program
             if (!args.Contains("--host")) { Console.Error.WriteLine("AgentDock.Host --host | --mcp | --version"); return 2; }
             // A short exclusive launch lock makes simultaneous on-demand starts converge on one owner.
             Directory.CreateDirectory(client.Home);
+            if (OperatingSystem.IsMacOS())
+                File.SetUnixFileMode(client.Home, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             FileStream launch;
             try { launch = new(Path.Combine(client.Home, "launch.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
             catch (IOException) { return 0; }
@@ -45,6 +47,8 @@ public static class Program
                 var application = new HostApplication(service, vault, client.Home);
                 var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
                 await File.WriteAllTextAsync(Path.Combine(client.Home, "connection.token"), token);
+                if (OperatingSystem.IsMacOS())
+                    File.SetUnixFileMode(Path.Combine(client.Home, "connection.token"), UnixFileMode.UserRead | UnixFileMode.UserWrite);
                 await ServeAsync(client.PipeName, application, token);
             }
             return 0;
@@ -62,7 +66,7 @@ public static class Program
         var path = Environment.GetEnvironmentVariable("AGENTDOCK_HOST");
         if (!string.IsNullOrEmpty(path)) return path;
         // Installer-generated pointer belongs to AgentDock, never to the old MCP.
-        var pointer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AgentDock", "install", "current.json");
+        var pointer = Path.Combine(InstallState.DefaultRoot, "install", "current.json");
         var pluginInstall = Path.Combine(AppContext.BaseDirectory, "install.json");
         if (File.Exists(pluginInstall))
         {
@@ -100,20 +104,24 @@ public static class Program
             catch (OperationCanceledException) { }
         });
         application.Exiting += () => cancellation.Cancel();
+        NamedPipeServerStream NewListener() => new(pipeName, PipeDirection.InOut, 32, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        var listener = NewListener();
         try
         {
             while (!cancellation.IsCancellationRequested)
             {
-                var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 32, PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                try { await pipe.WaitForConnectionAsync(cancellation.Token); }
-                catch { pipe.Dispose(); throw; }
+                await listener.WaitForConnectionAsync(cancellation.Token);
+                var pipe = listener;
+                // On Unix the last disposed instance removes the shared socket.
+                // Retain the next listener before a fast request can finish.
+                listener = NewListener();
                 clients.RemoveAll(x => x.IsCompleted);
                 clients.Add(HandleAsync(pipe, application, token));
             }
         }
         catch (OperationCanceledException) { }
-        finally { cancellation.Cancel(); await maintenance; await Task.WhenAll(clients); }
+        finally { listener.Dispose(); cancellation.Cancel(); await maintenance; await Task.WhenAll(clients); }
     }
 
     private static async Task HandleAsync(NamedPipeServerStream pipe, HostApplication application, string token)

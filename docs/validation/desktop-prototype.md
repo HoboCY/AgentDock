@@ -74,7 +74,7 @@ dotnet src/AgentDock.Desktop/bin/Debug/net10.0/AgentDock.Desktop.dll --tray
 - `credential.set` 后凭据状态与失效错误路径：需后台运行。
 - 登录自启复选框写入注册表：需要安装版目录结构（`../desktop/AgentDock.Desktop.exe`）。
 - 历史清理预览/确认的端到端计数：需后台数据。
-- macOS：托盘、透明置顶、字号在真实设备上的表现未验证，不能以 Windows 结果替代。
+- 此原型阶段未验证 macOS；后续真实设备的窗口、托盘对象、透明置顶、中文显示及资源样本见 [macos.md](macos.md)。系统托盘菜单点击和屏幕阅读器的完整人工验收仍独立记录。
 
 ## 已知缺口与风险
 

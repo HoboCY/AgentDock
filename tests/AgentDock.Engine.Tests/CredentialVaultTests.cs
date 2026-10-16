@@ -3,6 +3,30 @@ using Xunit;
 
 namespace AgentDock.Engine.Tests;
 
+/// <summary>Windows DPAPI vault tests; macOS coverage lives in <see cref="MacCredentialVaultTests"/>.</summary>
+public sealed class WindowsVaultFactAttribute : FactAttribute
+{
+    public WindowsVaultFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Skip = "DPAPI vault tests run on Windows only.";
+        }
+    }
+}
+
+/// <summary>Windows DPAPI vault theory; macOS coverage lives in <see cref="MacCredentialVaultTests"/>.</summary>
+public sealed class WindowsVaultTheoryAttribute : TheoryAttribute
+{
+    public WindowsVaultTheoryAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Skip = "DPAPI vault tests run on Windows only.";
+        }
+    }
+}
+
 public sealed class CredentialVaultTests : IDisposable
 {
     private readonly string _home = Path.Combine(Path.GetTempPath(), "agentdock-vault-" + Guid.NewGuid().ToString("N"));
@@ -25,14 +49,14 @@ public sealed class CredentialVaultTests : IDisposable
         }
     }
 
-    [Fact]
+    [WindowsVaultFact]
     public void EmptyVaultHasNoCredential()
     {
         Assert.False(_vault.IsConfigured);
         Assert.Null(_vault.Read());
     }
 
-    [Fact]
+    [WindowsVaultFact]
     public void SetStoresProtectedBlobAndReadRoundTrips()
     {
         const string key = "sk-fixture-0123456789";
@@ -44,7 +68,7 @@ public sealed class CredentialVaultTests : IDisposable
         Assert.DoesNotContain(key, Convert.ToHexString(blob));
     }
 
-    [Fact]
+    [WindowsVaultFact]
     public void SetReplacesTheExistingBlobWithoutTemporaryResidue()
     {
         _vault.Set("sk-first-fixture");
@@ -55,7 +79,7 @@ public sealed class CredentialVaultTests : IDisposable
         Assert.Equal([Path.Combine(_home, CredentialVault.FileName)], Directory.GetFiles(_home));
     }
 
-    [Theory]
+    [WindowsVaultTheory]
     [InlineData("")]
     [InlineData("  ")]
     [InlineData("has whitespace")]
@@ -68,7 +92,7 @@ public sealed class CredentialVaultTests : IDisposable
         Assert.False(_vault.IsConfigured);
     }
 
-    [Fact]
+    [WindowsVaultFact]
     public void CorruptedBlobFailsAsCredentialInvalid()
     {
         File.WriteAllBytes(Path.Combine(_home, CredentialVault.FileName), [1, 2, 3, 4, 5]);

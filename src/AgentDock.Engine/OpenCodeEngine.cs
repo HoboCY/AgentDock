@@ -8,10 +8,9 @@ namespace AgentDock.Engine;
 
 /// <summary>
 /// Production OpenCode execution engine: pinned OpenCode 1.18.30 behind the
-/// pinned Codex Windows sandbox, with a per-job loopback capability relay,
-/// job-object process containment, isolated configuration and before/after
-/// project change observation. macOS fails closed until the OS contract has
-/// been validated on real hardware.
+/// pinned Codex sandbox, with a per-job loopback capability relay,
+/// OS process containment, isolated configuration and before/after
+/// project change observation.
 /// </summary>
 public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : IExecutionEngine
 {
@@ -29,6 +28,7 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
     /// <summary>Call only while owning the Host launch lock, before admitting any tasks.</summary>
     public static void RecoverAbandonedJobs(string home)
     {
+        if (OperatingSystem.IsMacOS()) MacJobProcess.RecoverAbandonedJobs(home);
         var root = Path.Combine(Path.GetFullPath(home), "engine");
         if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) return;
         foreach (var directory in new DirectoryInfo(root).GetDirectories())
@@ -65,10 +65,10 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
         {
             throw new DockException("engine-home-missing", "The AgentDock engine home directory is not configured.");
         }
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
         {
             throw new DockException("platform-unsupported",
-                "OpenCode execution requires the validated Windows sandbox; macOS stays disabled until real-device validation.");
+                "OpenCode execution requires the Windows or macOS sandbox.");
         }
         if (cancellationToken.IsCancellationRequested)
         {
@@ -103,7 +103,7 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
         var timeoutSeconds = task.Configuration?.TimeoutSeconds ?? 1200;
         var adapter = new OpenCodeEventAdapter();
         GoRelay? relay = null;
-        JobProcess? process = null;
+        IJobProcess? process = null;
         Dictionary<string, string>? before = null;
         string? jobRoot = null;
         string? checkArtifacts = null;
@@ -126,8 +126,9 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
 
             process = _hooks.ProcessStarter is { } starter
                 ? starter(prepared.SandboxExecutable, prepared.SandboxArguments, task.Project, prepared.SandboxEnvironment)
-                : JobProcess.Start(prepared.SandboxExecutable, prepared.SandboxArguments, task.Project,
-                    prepared.SandboxEnvironment);
+                : OperatingSystem.IsMacOS()
+                    ? MacJobProcess.Start(prepared.SandboxExecutable, prepared.SandboxArguments, task.Project, prepared.SandboxEnvironment)
+                    : JobProcess.Start(prepared.SandboxExecutable, prepared.SandboxArguments, task.Project, prepared.SandboxEnvironment);
             var job = process;
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -139,11 +140,16 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
             {
                 try
                 {
-                    ((JobProcess)state!).Terminate();
+                    ((IJobProcess)state!).Terminate();
                 }
                 catch (Exception error) when (error is Win32Exception or ObjectDisposedException or InvalidOperationException)
                 {
                     // The tree already exited.
+                }
+                catch (DockException)
+                {
+                    // Cancellation callbacks cannot throw on the timer thread.
+                    // WaitForExit/Dispose repeat verification and surface an unclean stop.
                 }
             }, job);
 
@@ -460,5 +466,5 @@ internal sealed record EngineHooks
     /// in-sandbox runner before OS-level sandbox validation is available; the
     /// production path always starts the pinned Codex sandbox.
     /// </summary>
-    public Func<string, IReadOnlyList<string>, string, IReadOnlyDictionary<string, string>, JobProcess>? ProcessStarter { get; init; }
+    public Func<string, IReadOnlyList<string>, string, IReadOnlyDictionary<string, string>, IJobProcess>? ProcessStarter { get; init; }
 }

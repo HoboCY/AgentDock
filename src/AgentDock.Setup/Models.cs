@@ -3,8 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace AgentDock.Setup;
 
-/// <summary>安装包 payload 清单（payload-manifest.json，位于 payload 根）。</summary>
-internal sealed record PayloadFile(string Path, long Size, string Sha256);
+/// <summary>
+/// 安装包 payload 清单（payload-manifest.json，位于 payload 根）。
+/// <paramref name="Mode"/> 为可选的 Unix 权限位（八进制字符串，如 "0755"）：
+/// macOS payload 必须为可执行文件声明；旧 Windows 清单没有该属性，解析为 null 并保持默认权限。
+/// </summary>
+internal sealed record PayloadFile(string Path, long Size, string Sha256, string? Mode = null);
 
 internal sealed record PayloadManifest(int Schema, string Product, string Version, string Runtime, PayloadFile[] Files, bool Partial = false);
 

@@ -92,6 +92,7 @@ public static class SmokeTest
             at = DateTimeOffset.Now,
             hostRequired = false,
             hostReachable = app.State.HostReachable,
+            taskCount = app.State.Tasks.Length,
             trayCreated = app.TrayCreated,
             mainOpenedMilliseconds = app.MainOpenedMilliseconds,
             idleCpuPercent,

@@ -14,6 +14,13 @@ public sealed class HostIntegrationTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(root);
+        if (OperatingSystem.IsMacOS())
+        {
+            var launcher = new DockClient(root, Path.ChangeExtension(typeof(AgentDock.Host.Program).Assembly.Location, null));
+            await launcher.EnsureHostAsync();
+            host = Process.GetProcessById((await Client.InvokeAsync<HostStatus>("status")).ProcessId);
+            return;
+        }
         host = Start("--host", root);
         for (var i = 0; i < 40; i++)
         {
@@ -23,6 +30,13 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             catch (IOException) { await Task.Delay(50); }
         }
         throw new TimeoutException("Host did not become ready.");
+    }
+
+    [Fact]
+    public async Task SequentialShortRequestsKeepTheHostReachable()
+    {
+        for (var index = 0; index < 100; index++)
+            Assert.Equal(host!.Id, (await Client.InvokeAsync<HostStatus>("status")).ProcessId);
     }
 
     [Fact]
@@ -122,13 +136,14 @@ public sealed class HostIntegrationTests : IAsyncLifetime
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("AGENTDOCK_TEST_SANDBOX")!)
         { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in new[] { "sandbox", "-P", "probe", "-C", root, "-c", "permissions.probe.filesystem=" + fs,
-            "-c", "permissions.probe.network.enabled=false", "-c", "windows.sandbox=\"unelevated\"", "--", "dotnet",
+            "-c", "permissions.probe.network.enabled=true", "-c", "windows.sandbox=\"unelevated\"", "--", "dotnet",
             typeof(RecoveryFixture).Assembly.Location, "--pipe-auth-probe", root }) start.ArgumentList.Add(arg);
         start.Environment["CODEX_HOME"] = sandboxHome;
         start.Environment["TEMP"] = runtime;
         start.Environment["TMP"] = runtime;
         start.Environment["DOTNET_CLI_HOME"] = runtime;
         start.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+        start.Environment["DOTNET_EnableDiagnostics"] = "0";
         using var process = Process.Start(start)!;
         try
         {
@@ -146,6 +161,7 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             Assert.Contains("TOKEN_READ", observed);
             Assert.DoesNotContain("ACCEPTED", observed);
             Assert.True(observed.Contains("UntrustedClient") || observed.Contains("PIPE_DENIED:UnauthorizedAccessException"), observed);
+            if (OperatingSystem.IsMacOS()) Assert.Contains("UntrustedClient", observed);
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }
@@ -157,7 +173,8 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             StandardOutputEncoding = new System.Text.UTF8Encoding(false, true) };
         start.ArgumentList.Add(typeof(AgentDock.Host.Program).Assembly.Location);
         start.ArgumentList.Add(mode); start.ArgumentList.Add("--home"); start.ArgumentList.Add(home);
-        start.Environment["AGENTDOCK_HOST"] = Path.ChangeExtension(typeof(AgentDock.Host.Program).Assembly.Location, ".exe");
+        start.Environment["AGENTDOCK_HOST"] = Path.ChangeExtension(typeof(AgentDock.Host.Program).Assembly.Location,
+            OperatingSystem.IsWindows() ? ".exe" : null);
         return Process.Start(start)!;
     }
     public async Task DisposeAsync()
@@ -171,6 +188,14 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             }
             host.Dispose();
         }
+        if (OperatingSystem.IsMacOS())
+        {
+            await MacHostLauncher.RemoveStoppedAsync(root);
+            // Only this fixture's unique temporary data home can be removed.
+            var identity = AgentDock.Engine.MacKeychain.Identity(root);
+            Assert.StartsWith(ProjectPaths.Canonicalize(Path.GetTempPath()) + Path.DirectorySeparatorChar, identity.Account);
+            AgentDock.Engine.MacKeychain.Delete(identity);
+        }
         if (Directory.Exists(root)) Directory.Delete(root, true);
     }
 }
@@ -179,7 +204,8 @@ public sealed class SandboxFactAttribute : FactAttribute
 {
     public SandboxFactAttribute()
     {
-        if (!OperatingSystem.IsWindows() || !File.Exists(Environment.GetEnvironmentVariable("AGENTDOCK_TEST_SANDBOX")))
-            Skip = "Requires the pinned Windows sandbox executable via AGENTDOCK_TEST_SANDBOX.";
+        if ((!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS()) ||
+            !File.Exists(Environment.GetEnvironmentVariable("AGENTDOCK_TEST_SANDBOX")))
+            Skip = "Requires the pinned platform sandbox executable via AGENTDOCK_TEST_SANDBOX.";
     }
 }

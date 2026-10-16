@@ -21,14 +21,14 @@ public sealed class ExecutionSetupTests : IDisposable
         _enginePath = Path.Combine(_root, "tools", "opencode.exe");
         _sandboxPath = Path.Combine(_root, "tools", "codex", "bin", "codex.exe");
         _shellPath = Path.Combine(_root, "tools", "bash.exe");
-        _runnerPath = Path.Combine(_root, "tools", "AgentDock.Engine.exe");
+        _runnerPath = Path.Combine(_root, "tools", OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine");
         foreach (var file in new[] { _enginePath, _sandboxPath, _shellPath, _runnerPath })
         {
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, "fixture");
         }
         Directory.CreateDirectory(Path.Combine(_root, "tools", "codex", "codex-path"));
-        File.WriteAllText(Path.Combine(_root, "tools", "codex", "codex-path", "rg.exe"), "fixture");
+        File.WriteAllText(Path.Combine(_root, "tools", "codex", "codex-path", OperatingSystem.IsWindows() ? "rg.exe" : "rg"), "fixture");
         Directory.CreateDirectory(_project);
     }
 
@@ -74,8 +74,8 @@ public sealed class ExecutionSetupTests : IDisposable
                 Assert.True(File.Exists(Path.Combine(setup.SandboxHome, "config.toml")));
                 Assert.True(File.Exists(Path.Combine(setup.SandboxHome, "opencode.json")));
                 Assert.True(File.Exists(setup.LaunchPath));
-                Assert.True(File.Exists(Path.Combine(setup.Runtime, "opencode_pipe_compat.cjs")));
-                Assert.True(File.Exists(Path.Combine(setup.Runtime, "opencode_pipe_reader.cjs")));
+                Assert.Equal(OperatingSystem.IsWindows(), File.Exists(Path.Combine(setup.Runtime, "opencode_pipe_compat.cjs")));
+                Assert.Equal(OperatingSystem.IsWindows(), File.Exists(Path.Combine(setup.Runtime, "opencode_pipe_reader.cjs")));
                 Assert.True(Directory.Exists(setup.CheckArtifacts));
 
                 var configToml = File.ReadAllText(Path.Combine(setup.SandboxHome, "config.toml"));
@@ -84,12 +84,12 @@ public sealed class ExecutionSetupTests : IDisposable
                 Assert.Contains(setup.Runtime.Replace("\\", "\\\\"), configToml);
                 Assert.Contains(_project.Replace("\\", "\\\\"), configToml);
                 Assert.Contains(Path.GetDirectoryName(_runnerPath)!.Replace("\\", "\\\\"), configToml);
-                Assert.Contains("sandbox = \"unelevated\"", configToml);
+                Assert.Equal(OperatingSystem.IsWindows(), configToml.Contains("sandbox = \"unelevated\"", StringComparison.Ordinal));
 
                 var launch = File.ReadAllText(setup.LaunchPath);
                 Assert.DoesNotContain(relay.Token, launch);
                 Assert.DoesNotContain("fixture-key-not-real", launch);
-                Assert.Contains("opencode_pipe_compat.cjs", launch);
+                Assert.Equal(OperatingSystem.IsWindows(), launch.Contains("opencode_pipe_compat.cjs", StringComparison.Ordinal));
 
                 var openCode = File.ReadAllText(Path.Combine(setup.SandboxHome, "opencode.json"));
                 Assert.Contains(relay.Token, openCode);
@@ -180,12 +180,12 @@ public sealed class ExecutionSetupTests : IDisposable
         var packagedDirectory = Path.Combine(_root, "engine");
         Directory.CreateDirectory(baseDirectory);
         Directory.CreateDirectory(packagedDirectory);
-        File.WriteAllText(Path.Combine(packagedDirectory, "AgentDock.Engine.exe"), "fixture");
-        File.WriteAllText(Path.Combine(baseDirectory, "AgentDock.Engine.exe"), "fixture");
+        File.WriteAllText(Path.Combine(packagedDirectory, OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine"), "fixture");
+        File.WriteAllText(Path.Combine(baseDirectory, OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine"), "fixture");
 
         var runner = ExecutionSetup.ResolveRunner(null, baseDirectory);
 
-        Assert.Equal(Path.Combine(packagedDirectory, "AgentDock.Engine.exe"), runner[0]);
+        Assert.Equal(Path.Combine(packagedDirectory, OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine"), runner[0]);
     }
 
     [Fact]
@@ -193,12 +193,12 @@ public sealed class ExecutionSetupTests : IDisposable
     {
         var baseDirectory = Path.Combine(_root, "app-standalone");
         Directory.CreateDirectory(baseDirectory);
-        File.WriteAllText(Path.Combine(baseDirectory, "AgentDock.Engine.exe"), "fixture");
+        File.WriteAllText(Path.Combine(baseDirectory, OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine"), "fixture");
         File.WriteAllText(Path.Combine(baseDirectory, "AgentDock.Engine.dll"), "fixture");
 
         var runner = ExecutionSetup.ResolveRunner(null, baseDirectory);
 
-        Assert.Equal(Path.Combine(baseDirectory, "AgentDock.Engine.exe"), runner[0]);
+        Assert.Equal(Path.Combine(baseDirectory, OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine"), runner[0]);
     }
 
     [Fact]

@@ -15,6 +15,7 @@ public sealed class SandboxFactAttribute : FactAttribute
 {
     public SandboxFactAttribute()
     {
+        if (!OperatingSystem.IsWindows()) { Skip = "Windows sandbox fixtures; MacExecutionTests cover macOS."; return; }
         if (Environment.GetEnvironmentVariable("AGENTDOCK_ENGINE_SANDBOX_TESTS") != "1")
         {
             Skip = "Set AGENTDOCK_ENGINE_SANDBOX_TESTS=1 with the pinned tool paths to run real-sandbox probes.";

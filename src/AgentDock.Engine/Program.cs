@@ -16,6 +16,14 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        if (args.Length == 2 && string.Equals(args[0], "--mac-watchdog", StringComparison.Ordinal))
+        {
+            return MacJobSupervisor.RunWatchdog(args[1]);
+        }
+        if (args.Length == 2 && string.Equals(args[0], "--mac-job", StringComparison.Ordinal))
+        {
+            return MacJobSupervisor.RunJob(args[1]);
+        }
         if (args.Length != 2 || !string.Equals(args[0], "--launch", StringComparison.Ordinal))
         {
             Console.Error.WriteLine("usage: AgentDock.Engine --launch <launch.json>");

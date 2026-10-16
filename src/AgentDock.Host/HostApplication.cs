@@ -83,6 +83,7 @@ public sealed class HostApplication(TaskService service, CredentialVault vault, 
 
     private void SetStartAtLogin(bool enabled)
     {
+        if (OperatingSystem.IsMacOS()) { MacLoginStartup.Configure(home, enabled); return; }
         if (!OperatingSystem.IsWindows()) throw new DockException("PlatformNotValidated", "此平台登录自启尚未完成实机验证。");
         var root = Directory.GetParent(Path.GetFullPath(home))!.FullName;
         var launcher = Path.Combine(root, "AgentDock.exe");

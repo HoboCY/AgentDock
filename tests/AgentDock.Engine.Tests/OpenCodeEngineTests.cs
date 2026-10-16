@@ -27,7 +27,7 @@ public sealed class OpenCodeEngineTests : IDisposable
             File.WriteAllText(file, "fixture");
         }
         Directory.CreateDirectory(Path.Combine(_root, "tools", "codex", "codex-path"));
-        File.WriteAllText(Path.Combine(_root, "tools", "codex", "codex-path", "rg.exe"), "fixture");
+        File.WriteAllText(Path.Combine(_root, "tools", "codex", "codex-path", OperatingSystem.IsWindows() ? "rg.exe" : "rg"), "fixture");
         Directory.CreateDirectory(_project);
         Directory.CreateDirectory(_home);
     }

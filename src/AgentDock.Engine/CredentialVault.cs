@@ -11,42 +11,71 @@ namespace AgentDock.Engine;
 /// is replaced atomically (write to a temporary file, flush, replace) so a crash
 /// cannot leave a truncated credential.
 ///
+/// macOS stores the key as a current-user generic-password item in the login
+/// Keychain through the Security framework (SecItemAdd / SecItemUpdate /
+/// SecItemCopyMatching). The item is identified by a fixed service name plus the
+/// canonical data home as account, so one AgentDock data home never reads or
+/// overwrites another home's credential; the item is explicitly not
+/// synchronizable, and the key never goes through a shell command line or an
+/// environment variable. <see cref="IsConfigured"/> checks for the item without
+/// reading the secret data.
+///
 /// DPAPI CurrentUser is not read isolation between processes of the same user:
 /// any code running as this user can call CryptUnprotectData on the file, so
 /// there is no confidentiality guarantee against malicious same-user code (this
 /// includes code inside the unelevated sandbox, whose read access to the home
 /// directory is a required part of the supported policy, not a credential
-/// boundary). macOS Keychain support is not enabled in this build: Set/Read fail
-/// closed with an explicit error until the OS contract has been validated on
-/// real hardware.
+/// boundary). The same caveat applies to the login Keychain item. Other
+/// platforms still fail closed with an explicit error.
 /// </summary>
 public sealed class CredentialVault
 {
-    /// <summary>File name used inside the AgentDock home directory.</summary>
+    /// <summary>File name used for the DPAPI blob inside the AgentDock home directory.</summary>
     public const string FileName = "opencode-go.key.dpapi";
 
+    private readonly string _home;
     private readonly string _path;
 
     public CredentialVault(string home)
     {
         ArgumentException.ThrowIfNullOrEmpty(home);
-        _path = Path.Combine(Path.GetFullPath(home), FileName);
+        _home = ProjectPaths.Canonicalize(home);
+        _path = Path.Combine(_home, FileName);
     }
 
-    /// <summary>True when a protected credential blob exists (it may still fail to decrypt).</summary>
-    public bool IsConfigured => File.Exists(_path);
+    /// <summary>
+    /// True when a credential is stored for the current user (it may still fail to
+    /// decrypt). On macOS this checks for the Keychain item's presence without
+    /// reading its secret data.
+    /// </summary>
+    public bool IsConfigured
+    {
+        get
+        {
+            if (OperatingSystem.IsMacOS())
+            {
+                return MacKeychain.Exists(_home);
+            }
+            return File.Exists(_path);
+        }
+    }
 
     /// <summary>
-    /// Protects and stores the key for the current Windows user. The key must be
-    /// a single non-whitespace token; an invalid value is rejected.
+    /// Protects and stores the key for the current user. The key must be a
+    /// single non-whitespace token; an invalid value is rejected.
     /// </summary>
     public void Set(string key)
     {
         Validate(key);
+        if (OperatingSystem.IsMacOS())
+        {
+            MacKeychain.Save(_home, key);
+            return;
+        }
         if (!OperatingSystem.IsWindows())
         {
             throw new DockException("credential-platform-unsupported",
-                "Credential storage on macOS requires the validated Keychain contract; not enabled in this build.");
+                "Credential storage is implemented for Windows DPAPI and macOS Keychain only; this platform stays disabled.");
         }
         var protectedBytes = Dpapi.Protect(key);
         var directory = Path.GetDirectoryName(_path)!;
@@ -75,12 +104,30 @@ public sealed class CredentialVault
     }
 
     /// <summary>
-    /// Reads the key for the current Windows user. Returns null when nothing is
-    /// configured; throws <see cref="DockException"/> when a blob exists but
-    /// cannot be decrypted for this user or platform.
+    /// Reads the key for the current user. Returns null when nothing is
+    /// configured; throws <see cref="DockException"/> when a stored value exists
+    /// but cannot be decrypted for this user, or when the Keychain is locked or
+    /// denies access.
     /// </summary>
     public string? Read()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            var stored = MacKeychain.Read(_home);
+            if (stored is null)
+            {
+                return null;
+            }
+            try
+            {
+                Validate(stored);
+            }
+            catch (DockException)
+            {
+                throw new DockException("credential-invalid", "The stored OpenCode Go key is invalid.");
+            }
+            return stored;
+        }
         if (!File.Exists(_path))
         {
             return null;
@@ -88,7 +135,7 @@ public sealed class CredentialVault
         if (!OperatingSystem.IsWindows())
         {
             throw new DockException("credential-platform-unsupported",
-                "Credential storage on macOS requires the validated Keychain contract; not enabled in this build.");
+                "Credential storage is implemented for Windows DPAPI and macOS Keychain only; this platform stays disabled.");
         }
         string key;
         try

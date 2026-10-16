@@ -107,4 +107,6 @@ payload-manifest.json                  # 每文件 sha256 + size；安装/更新
 - `package-manifest.json` 记录 `partial`、`missingComponents`、`releaseBlocked`、`releaseReady`、`hostVersion`
   与内置 Git 的归档/`sh.exe` 哈希；只有 `releaseReady == true` 才允许作为发布候选。
 - Git（MinGit）缺失或哈希不符时构建必然失败——发行包不允许要求系统预装 Git。
-- 未签名、未在干净 Windows 虚机验收、未经真实 Mac 设备验收之前，不允许公开发布；macOS 产物一律标注 `UNSIGNED-UNVALIDATED`。
+- Windows 签名与干净虚机、Mac Developer ID 签名/公证与下载后的 Gatekeeper 验收分别作为发布门槛；公开发布需明确授权。真实 Mac 功能验收已完成，当前包保持 `releaseReady=false`，不能把本地可运行当成发行通过。
+
+Mac arm64 使用 [独立锁文件和打包说明](mac/README.md)。其最终 payload、安装器 ZIP/DMG、运行时来源和实机结果见 [macos.md](../docs/validation/macos.md)。

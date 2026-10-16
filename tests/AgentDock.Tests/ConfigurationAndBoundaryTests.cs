@@ -73,6 +73,32 @@ public sealed class ConfigurationAndBoundaryTests : IDisposable
         Assert.Equal("InvalidProject", Assert.Throws<DockException>(() => ProjectPaths.Normalize("relative")).Code);
     }
 
+    [MacPathFact]
+    public async Task MacPathAliasesCannotStartOverlappingWriters()
+    {
+        var project = Path.Combine(root, "CaseProject");
+        Directory.CreateDirectory(project);
+        var differentCase = Path.Combine(root, "caseproject");
+        var alias = Path.Combine(root, "project-link");
+        Directory.CreateSymbolicLink(alias, project);
+        await using var service = new TaskService(Path.Combine(root, "state"), new BlockingEngine());
+        var first = service.Start(new("mac-canonical", project, "one", "worker", "task"));
+        var second = service.Start(new("mac-alias", alias, "two", "worker", "task"));
+        Assert.Equal(first.Project, second.Project);
+        Assert.Equal(TaskStatus.Queued, second.Status);
+        if (Directory.Exists(differentCase))
+        {
+            var third = service.Start(new("mac-case", differentCase, "three", "worker", "task"));
+            Assert.Equal(first.Project, third.Project);
+            Assert.Equal(TaskStatus.Queued, third.Status);
+        }
+        else
+        {
+            Directory.CreateDirectory(differentCase);
+            Assert.NotEqual(ProjectPaths.Normalize(project), ProjectPaths.Normalize(differentCase));
+        }
+    }
+
     private sealed class BlockingEngine : IExecutionEngine
     {
         public async Task<ExecutionResult> ExecuteAsync(ExecutionTask task, Action<EngineEvent> report, CancellationToken cancellationToken)
@@ -82,4 +108,12 @@ public sealed class ConfigurationAndBoundaryTests : IDisposable
         }
     }
     public void Dispose() => Directory.Delete(root, true);
+}
+
+public sealed class MacPathFactAttribute : FactAttribute
+{
+    public MacPathFactAttribute()
+    {
+        if (!OperatingSystem.IsMacOS()) Skip = "Requires real macOS path identity semantics.";
+    }
 }

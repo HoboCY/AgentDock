@@ -5,6 +5,7 @@
     <Project Path="src/AgentDock.Host/AgentDock.Host.csproj" />
     <Project Path="src/AgentDock.Desktop/AgentDock.Desktop.csproj" />
     <Project Path="src/AgentDock.Setup/AgentDock.Setup.csproj" />
+    <Project Path="src/AgentDock.MacSetup/AgentDock.MacSetup.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentDock.Tests/AgentDock.Tests.csproj" />

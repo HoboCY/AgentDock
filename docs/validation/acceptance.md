@@ -4,25 +4,25 @@
 
 本文件区分源代码实现、本机实测与发布验收。真实 OpenCode CLI + 本地脚本化模型可以验证工具、权限、用量适配和停止链路，不能证明真实 OpenCode Go 账户可用或其当前用量字段完全一致。
 
-Windows 本地实现与自包含包已经完成。完整回归 113 项通过、0 失败、0 跳过；最终包通过 16 项安装/修复/升级/卸载检查，以及 Codex app-server 真实插件调用。Standards 与 Spec 独立审查及处理记录见 [review.md](review.md)。用户已独立配置 Go 凭据，五角色真实最小任务及重试幂等已通过；Mac SSH 接入准备中，尚未通过 Mac 验收。
+Windows 本地实现与自包含包已经完成。最终代码的完整回归 114 项通过（Engine 89、Core/Host 25），19 项 Mac 平台用例跳过；安装包通过 16 项安装/修复/升级/卸载检查，以及 Codex app-server 真实插件调用。Standards 与 Spec 独立审查及处理记录见 [review.md](review.md)。两平台均通过独立 Go 账户的五角色真实最小任务、重试幂等与四任务并发采样。真实 Mac 的后端、Keychain、GUI、进程停止、完整安装/升级/卸载和账户链路见 [Mac 记录](macos.md)，其中 Core/Host 28 项、Engine 87 项、安装门禁 21 项通过。
 
 ## 覆盖矩阵
 
 | 决策 | 实现与可复现证据 | 尚需的外部验收 |
 | --- | --- | --- |
 | Q1、Q19 | Setup、自包含打包脚本、固定运行时锁文件、真实 Codex app-server 插件探针 | 无开发工具的干净 Windows 安装与独立账户最小调用 |
-| Q2、Q8、Q14 | Engine 固定 OpenCode Go / deepseek-v4.1-flash；五角色；系统写权限与 verifier 专属产物目录；独立沙箱测试 | macOS 权限；更多用户项目的工具链兼容 |
-| Q3 | Core / Desktop 共享 .NET；Windows 执行后端；macOS 构建配方明确未验收 | macOS 后端、凭据和安装发行流程须在真机完成，不声明支持 |
+| Q2、Q8、Q14 | Engine 固定 OpenCode Go / deepseek-v4.1-flash；五角色；两平台 OS 写权限与 verifier 专属产物目录实测 | 更多用户项目的工具链兼容 |
+| Q3 | 两平台完整本地包及真实五角色；macOS launchd、Keychain、沙箱、GUI、真实版本升级均实测 | 签名、公证和系统分发拦截验收；其他 macOS 版本 |
 | Q4、Q6、Q10 | Host 单实例、客户端按需启动、真实桌面显示/隐藏/重开；MCP EOF 不停后台 | 登录自启在干净安装的交互验收 |
 | Q5、Q7 | 全局配置、项目筛选、范围用量汇总、悬浮窗活跃任务 | 大量项目的人机可读性复核 |
-| Q9、Q16、Q23 | SchedulingAndRetentionTests：跨项目容量、父子目录串行、排队配置快照；不创建 worktree | 真实模型并发 4 的资源样本 |
+| Q9、Q16、Q23 | SchedulingAndRetentionTests：跨项目容量、父子目录串行、排队配置快照；真实账户并发 4 已采样；不创建 worktree | 更多项目工具链的负载样本 |
 | Q11、Q24 | 可控时间测试覆盖从 FinishedAt 起算的 7/30 天边界；手动清理预览及结果；未完成任务受保护 | 无额外平台特有门槛 |
 | Q12、Q13 | 分阶段 usage 去重/修订；缺失字段为 null；SSE 生成计时；单独显示 AcceptedAt 总耗时 | 抽验真实上游 input/output/reasoning/cache 字段 |
 | Q15、Q21 | 真实进程崩溃恢复、取消、超时、退出确认；文件哈希观察不宣称因果归属 | 真实账户的停止/超时抽验 |
 | Q17、Q18 | 真实 Avalonia 主面板/托盘/340×190 悬浮窗；透明度、置顶、失败与可选完成通知 | 屏幕阅读器和不同缩放/DPI 的人工检查 |
 | Q20、Q26 | 旧 MCP 只读提示；探针前后 Codex 配置哈希一致；新数据目录无旧任务/角色/凭据 | 干净机与多配置位置共存抽验 |
 | Q22 | 手动版本检查，只提示；安装器拒绝有运行/排队/暂停任务的更新 | 已签名发行包的真实更新演练 |
-| Q25 | 独立后台/桌面资源探针与执行进程释放测试 | 干净机长期空闲、四任务并发、真实模型资源样本 |
+| Q25 | 独立后台/桌面资源探针、执行进程释放测试；两平台完整包真实模型四并发样本 | 干净机长期空闲、更多负载与低内存设备预算 |
 
 ## 本机桌面观测
 
@@ -34,7 +34,7 @@ Windows 本地实现与自包含包已经完成。完整回归 113 项通过、0
 
 最终安装版 Release 60 秒样本（14:34）：后台工作集 **45.0 MiB**、私有内存 14.4 MiB、CPU 0.030%；桌面工作集 **192.1 MiB**、私有内存 157.5 MiB、CPU 0.154%；合计工作集约 237 MiB、CPU 0.184%。Host 可连接约 140 ms，主面板 Opened 事件约 1.12 s。这是当前机器单次启动观测，未清空 OS 文件缓存，不称为冷启动保证。主面板、悬浮窗、隐藏/重开、托盘创建均通过；桌面退出后 Host 存活，原 Codex 配置哈希未变。
 
-此样本满足上述暂定目标，干净机和执行负载仍需另测。payload ZIP **409.8 MiB**，Setup **110.8 MiB**，两者合计约 520.6 MiB；主要包括固定 OpenCode、Codex 沙箱、MinGit 和自包含 .NET。当前安装体积不能称为小型安装包；后续精简方向是减少重复 runtime/Host 分发，须保持普通用户无需开发环境和插件缓存可独立启动的契约。
+此空闲样本满足上述暂定目标，干净机仍需另测；执行负载见下文。payload ZIP 约 **409.8 MiB**，Setup 约 **110.8 MiB**，两者合计约 520.6 MiB；主要包括固定 OpenCode、Codex 沙箱、MinGit 和自包含 .NET。当前安装体积不能称为小型安装包；后续精简方向是减少重复 runtime/Host 分发，须保持普通用户无需开发环境和插件缓存可独立启动的契约。
 
 证据路径：`artifacts/validation/final-tests/*.trx`、`final-setup-gates/results.json`、`plugin-final.json`、`desktop-release/result.json`。`version-update-preserves-data-and-rejects-unfinished` 与损坏更新场景使用合成 payload，只证明安装事务和版本指针；真实 payload 场景证明程序/运行时安装，不能代替两个真实发行版本间的升级验收。
 
@@ -50,7 +50,7 @@ Windows 本地实现与自包含包已经完成。完整回归 113 项通过、0
 | reviewer | 8678 | 177 | 243.10 |
 | verifier | 11796 | 3282 | 122.84 |
 
-速度是各任务最后一轮的观测值，不是整项任务平均，不构成性能保证。提供方账单、未覆盖的复杂 compaction、并发资源峰值仍需另外抽验。
+速度是各任务最后一轮的观测值，不是整项任务平均，不构成性能保证。并发资源样本已补充；提供方账单与未覆盖的复杂 compaction 仍需另行抽验。
 
 ```powershell
 dotnet test AgentDock.slnx -m:1
@@ -62,4 +62,28 @@ OS 权限测试必须从普通 Windows 会话执行；嵌套在受限令牌中�
 
 ## 发布门槛
 
-用户已安排 Mac 接入；相应实机结果仍待取得。尚未授权公开发版或推送。本地构建和 Git 提交不等于 GitHub 分发。代码签名、干净 Windows 环境、独立真实 Go 凭据和真实 Mac 环境分别记录，缺少任何对应证据时不关闭相关平台验收任务。Mac 不可用不阻塞已验证 Windows 工作的本地交付。
+真实 Mac 完整安装与账户验收已通过，但 Developer ID、公证和 Gatekeeper 发行检查未通过。Windows 未配置发行签名，干净 Windows 安装验收未执行；当前机器没有可用 Windows Sandbox 程序或 Hyper-V 服务。尚未授权公开发版或推送。本地构建和 Git 提交不等于 GitHub 分发，#1/#10/#11/#12 保留对应未完成门槛。基础 UI 可访问性、托盘通知和完全退出确认的人工验收、真正冷启动观测也未冒充已完成。
+
+## 真实 Windows 四任务负载（2026-10-16）
+
+安装版、用户独立配置的 OpenCode Go 账户、合成项目：explorer 完成后同时提交 default、worker、reviewer、verifier，五角色全部 Completed，重试身份一致。52 个成功样本覆盖 52.25 秒，其中 13 个样本观察到 4 项同时 Running；无采样错误。采样只读取任务状态和进程资源，不导出凭据。
+
+| 指标 | 观测峰值 |
+| --- | ---: |
+| Host 工作集 | 104.46 MiB |
+| Desktop 工作集 | 162.10 MiB |
+| 执行进程合计工作集 | 6894.42 MiB |
+| 全部合计工作集 | 7158.08 MiB（约 7.0 GiB） |
+| CPU（24 逻辑处理器归一） | 29.19%（采样均值 3.55%） |
+
+主要占用来自四个 OpenCode 进程，各约 1.6–1.7 GiB；工作集相加可能重复计算共享页，不等于独占物理内存。一秒采样可能遗漏短命进程，不能作为最坏上限。完成后独立检查确认没有遗留执行中的 OpenCode/Codex/Engine 子进程。默认并发仍为冻结规格中的 4；该样本说明执行引擎占用显著高于空闲桌面，尚未制定低内存设备的发行预算。
+
+证据：`artifacts/mac-validation/windows-load/{plugin-load.json,samples.jsonl,resource-summary.json}`。新增平台回归：`artifacts/mac-validation/windows-regression/*.trx`。
+
+## 最终交付快照
+
+最终完整回归在 `artifacts/mac-validation/windows-complete-final-enabled/`，包含实际固定 OpenCode/Codex 沙箱。第一次收尾检查暴露 Windows 进程测试读取尚未关闭的 PID 文件；测试改为关闭临时文件后再移动发布，并确保断言失败也释放 job，随后全套通过。该修复不修改产品进程行为。
+
+随后带任务数据的真实 UI 检查发现两平台共有的列表模板空值崩溃。`BuildTaskRow` 现接受 Avalonia 回收项时传来的 null；`Probe-Desktop.ps1 -SeedTasks` 使用离线合成终态数据覆盖这个场景，不需凭据或模型调用。旧 Windows 包复现崩溃，最终包通过；Mac 以已有五任务及新一轮真实五角色通过，任务列表保持可见。修复后全套 Windows 测试再次为 114 通过、19 平台跳过（`windows-ui-final/`）。
+
+最终本地包目录为 `artifacts/release-candidate/final-ui-20261016/{win-x64,osx-arm64}/`，保留先前候选和测试证据。Windows 安装器 SHA-256 与已通过 16 门禁的版本相同，最新插件与有任务 UI 证据在 `windows-ui-final-plugin.json`、`windows-row-after/result.json`；Mac 构件哈希、安装和负载明细见 [macos.md](macos.md)。这些目录不入 Git；代码仓库只包含源码、脚本、模板、锁文件与脱敏验收结论。

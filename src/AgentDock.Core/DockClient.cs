@@ -9,20 +9,26 @@ namespace AgentDock.Core;
 public sealed class DockClient(string? home = null, string? hostExecutable = null)
 {
     public string Home { get; } = Path.GetFullPath(home ?? Environment.GetEnvironmentVariable("AGENTDOCK_HOME") ??
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AgentDock", "data"));
+        InstallState.DefaultHome);
 
     public string PipeName => PipeFor(Home);
     public static string PipeFor(string home) => "agentdock-" + Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes(OperatingSystem.IsWindows() ? Path.GetFullPath(home).ToUpperInvariant() : Path.GetFullPath(home))))[..24];
+        Encoding.UTF8.GetBytes(OperatingSystem.IsWindows() ? Path.GetFullPath(home).ToUpperInvariant() : ProjectPaths.Canonicalize(home))))[..24];
 
     public async Task EnsureHostAsync(CancellationToken cancellationToken = default)
     {
         try { await InvokeAsync<HostStatus>("status", cancellationToken: cancellationToken); return; }
         catch (Exception ex) when (ex is TimeoutException or IOException) { }
         InstallState.RequireAvailable(Home);
-        var executable = hostExecutable ?? Environment.GetEnvironmentVariable("AGENTDOCK_HOST") ??
+        var executable = (OperatingSystem.IsMacOS() ? InstallState.CurrentHost(Home) : null) ??
+            hostExecutable ?? Environment.GetEnvironmentVariable("AGENTDOCK_HOST") ??
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "host", OperatingSystem.IsWindows() ? "AgentDock.Host.exe" : "AgentDock.Host"));
         if (!File.Exists(executable)) throw new DockException("HostMissing", "未找到配套后台程序。请重新安装完整 AgentDock 包。");
+        if (OperatingSystem.IsMacOS())
+        {
+            await MacHostLauncher.StartAsync(Home, executable, cancellationToken);
+            return;
+        }
         var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
         start.ArgumentList.Add("--host"); start.ArgumentList.Add("--home"); start.ArgumentList.Add(Home);
         using var process = Process.Start(start) ?? throw new IOException("后台启动失败。");

@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "product": "AgentDock",
+  "channel": "v1",
+  "platform": "osx-arm64",
+  "note": "macOS 固定版本组合：构建输入必须已经由 main 验证（哈希/来源/provenance），Build-MacPackage.py 绝不下载任何运行时。OpenCode/Codex 输入为已解包的官方 npm 包；Git 为 main 提供的独立分发并必须附带 provenance.json。",
+  "dotnet": {
+    "sdk": "10.0.401",
+    "runtime": "10.0.12",
+    "note": "自包含发布固定 RuntimeFrameworkVersion；SDK 必须以 10.0.401 开头（--allow-sdk-mismatch 仅限本地排查）。"
+  },
+  "runtimes": {
+    "opencode": {
+      "displayName": "OpenCode",
+      "version": "1.18.30",
+      "to": "engines/opencode",
+      "inputArg": "--opencode-root",
+      "required": ["bin/opencode", "package.json"],
+      "versionFiles": ["package.json"],
+      "versionKey": "version",
+      "provenanceFile": "provenance.json",
+      "provenanceRequired": true,
+      "archivePrefix": "package/",
+      "source": "https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.18.30.tgz",
+      "archiveSha512": "KO4FJGZpgmSz+NNQ6PizynT5qAzVfoZI5HJLpyD0tYNqePPu87g2/UgVmNW663Bock2r75koLZFjR5waZiFiqw==",
+      "license": "MIT",
+      "homepage": "https://opencode.ai/"
+    },
+    "codex": {
+      "displayName": "Codex sandbox",
+      "version": "0.153.4",
+      "to": "engines/codex",
+      "inputArg": "--codex-root",
+      "required": ["bin/codex", "codex-package.json"],
+      "versionFiles": ["codex-package.json", "package.json"],
+      "versionKey": "version",
+      "provenanceFile": "provenance.json",
+      "provenanceRequired": true,
+      "archivePrefix": "package/vendor/aarch64-apple-darwin/",
+      "source": "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-darwin-arm64.tgz",
+      "archiveSha512": "B1qhN3fa1ay0R0wGziXqgwSkB5icpYChNKHhtBHff/0UtSTC7z+l8aTtvMlGjH3E8HEvY3+njIJelM9CAAoVWg==",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/openai/codex"
+    },
+    "git": {
+      "displayName": "Git (standalone distribution)",
+      "version": "2.54.0",
+      "sourceSha256": "f689162364c10de79ef89aa8dbf48731eb057e34edbbd20aca510ce0154681a3",
+      "to": "engines/git",
+      "inputArg": "--git-root",
+      "required": ["bin/git", "libexec/git-core/git"],
+      "versionFiles": ["provenance.json"],
+      "provenanceFile": "provenance.json",
+      "provenanceRequired": true,
+      "license": "GPL-2.0-only（Git 本体）；随包保留分发自带许可证文件",
+      "homepage": "https://git-scm.com/"
+    }
+  }
+}

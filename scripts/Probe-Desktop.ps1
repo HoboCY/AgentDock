@@ -2,7 +2,8 @@ param(
     [string]$HostPath = "$PSScriptRoot/../src/AgentDock.Host/bin/Debug/net10.0/AgentDock.Host.exe",
     [string]$DesktopPath = "$PSScriptRoot/../src/AgentDock.Desktop/bin/Debug/net10.0/AgentDock.Desktop.exe",
     [string]$Output = "$PSScriptRoot/../artifacts/validation/desktop-live",
-    [ValidateRange(3,120)][int]$IdleSampleSeconds = 3
+    [ValidateRange(3,120)][int]$IdleSampleSeconds = 3,
+    [switch]$SeedTasks
 )
 $ErrorActionPreference = 'Stop'
 $Output = [IO.Path]::GetFullPath($Output)
@@ -36,6 +37,13 @@ function Start-App([string]$path, [string[]]$arguments) {
 $hostProcess = $null
 $desktopProcess = $null
 try {
+    if ($SeedTasks) {
+        [IO.Directory]::CreateDirectory($dataHome) | Out-Null
+        $fixtureProject = Join-Path $Output 'row-fixture'
+        [IO.Directory]::CreateDirectory($fixtureProject) | Out-Null
+        $now = [DateTimeOffset]::UtcNow.ToString('O')
+        @{ schema=1; tasks=@{ 'desktop-row-fixture'=@{ id='desktop-row-fixture'; requestId='desktop-row-regression'; project=$fixtureProject; title='列表刷新回归'; role='explorer'; status='Completed'; acceptedAt=$now; startedAt=$now; finishedAt=$now; result='Synthetic persisted UI fixture'; bodyAvailable=$true } }; requests=@{} } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $dataHome 'tasks.json') -Encoding utf8
+    }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $hostProcess = Start-App $HostPath @('--host','--home',$dataHome)
     $status = $null
@@ -57,11 +65,12 @@ try {
     if ($desktopProcess.ExitCode -ne 0) { throw "Desktop smoke failed: $($desktopProcess.ExitCode)" }
     $smoke = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
     if (!$smoke.ok -or !$smoke.hostReachable -or !$smoke.trayCreated) { throw 'Desktop windows, tray or host assertions failed.' }
+    if ($SeedTasks -and $smoke.taskCount -lt 1) { throw 'Desktop row recycling was not exercised.' }
     $after = Invoke-Dock 'status'
     if ($after.processId -ne $status.processId) { throw 'Desktop close replaced the background host.' }
     $afterHash = if (Test-Path -LiteralPath $originalConfig) { (Get-FileHash -LiteralPath $originalConfig).Hash } else { $null }
     if ($beforeHash -ne $afterHash) { throw 'Existing Codex configuration changed during probe.' }
-    @{ at=[DateTimeOffset]::Now; os=[Environment]::OSVersion.VersionString; host=$hostSample; desktop=$smoke; existingCodexConfigUnchanged=$true; taskSource='No real model calls or task submissions'; hostSurvivedDesktopExit=$true } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $Output 'result.json') -Encoding utf8
+    @{ at=[DateTimeOffset]::Now; os=[Environment]::OSVersion.VersionString; host=$hostSample; desktop=$smoke; existingCodexConfigUnchanged=$true; taskSource=$(if ($SeedTasks) { 'Synthetic persisted completed task; no task execution or real model calls' } else { 'No real model calls or task submissions' }); hostSurvivedDesktopExit=$true } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $Output 'result.json') -Encoding utf8
     Invoke-Dock 'shutdown' @{confirm=$false} | Out-Null
     if (!$hostProcess.WaitForExit(10000)) { throw 'Host failed to stop.' }
     Get-Content -LiteralPath (Join-Path $Output 'result.json') -Raw

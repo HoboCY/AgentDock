@@ -61,10 +61,10 @@ internal sealed class ExecutionSetup
         }
 
         var codexPathDirectory = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sandboxPath)!, "..", "codex-path"));
-        if (!File.Exists(Path.Combine(codexPathDirectory, "rg.exe")))
+        if (!File.Exists(Path.Combine(codexPathDirectory, OperatingSystem.IsWindows() ? "rg.exe" : "rg")))
         {
             throw new DockException("sandbox-layout",
-                "The pinned Codex layout is missing codex-path/rg.exe; reinstall the pinned sandbox version.");
+                "The pinned Codex layout is missing its codex-path/rg executable; reinstall the pinned sandbox version.");
         }
 
         var jobId = SafeName(task.Id);
@@ -105,15 +105,34 @@ internal sealed class ExecutionSetup
         {
             Directory.CreateDirectory(directory);
         }
-        WritePipeAdapters(runtime);
+        if (OperatingSystem.IsWindows()) WritePipeAdapters(runtime);
 
         var writableProject = IsProjectWritable(task.Role);
         var runner = ResolveRunner(engineExecutable);
         var filesystem = BuildFilesystem(sandboxPath, enginePath, shellPath, runner, runtime, cwd, sandboxHome,
             writableProject);
+        if (OperatingSystem.IsMacOS())
+        {
+            var dataHome = Directory.GetParent(Directory.GetParent(jobRoot)!.FullName)!.FullName;
+            // Protect management state and every other task's control files,
+            // including when a caller selected an ancestor as its project.
+            filesystem[dataHome] = "none";
+            filesystem[Path.Combine(jobRoot, "control")] = "none";
+            filesystem[Path.Combine(dataHome, "connection.token")] = "none";
+        }
         WriteSandboxConfig(sandboxHome, filesystem);
 
         var childEnvironment = BuildChildEnvironment(runtime, sandboxHome, shellPath, codexPathDirectory);
+        if (OperatingSystem.IsMacOS())
+        {
+            var gitRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(enginePath)!, "..", "git"));
+            if (File.Exists(Path.Combine(gitRoot, "bin", "git")))
+            {
+                childEnvironment["PATH"] = Path.Combine(gitRoot, "bin") + Path.PathSeparator + childEnvironment["PATH"];
+                childEnvironment["GIT_EXEC_PATH"] = Path.Combine(gitRoot, "libexec", "git-core");
+                childEnvironment["GIT_TEMPLATE_DIR"] = Path.Combine(gitRoot, "share", "git-core", "templates");
+            }
+        }
         var openCodeArguments = BuildOpenCodeArguments(enginePath, task, cwd);
         WriteOpenCodeConfig(sandboxHome, relay, task, writableProject, checkArtifacts, cwd);
         WriteLaunchFile(sandboxHome, openCodeArguments, childEnvironment);
@@ -128,6 +147,7 @@ internal sealed class ExecutionSetup
         sandboxArguments.Add(launchPath);
 
         var sandboxEnvironment = BuildSandboxEnvironment(sandboxHome, runtime);
+        if (OperatingSystem.IsMacOS()) sandboxEnvironment["AGENTDOCK_MAC_JOB_ROOT"] = jobRoot;
         return new ExecutionSetup
         {
             JobRoot = jobRoot,
@@ -169,7 +189,7 @@ internal sealed class ExecutionSetup
     private static Dictionary<string, string> BuildFilesystem(string sandboxPath, string enginePath, string shellPath,
         string[] runner, string runtime, string cwd, string sandboxHome, bool writableProject)
     {
-        var filesystem = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var filesystem = new Dictionary<string, string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
         {
             [":root"] = "read",
             [runtime] = "write",
@@ -216,6 +236,12 @@ internal sealed class ExecutionSetup
 
     internal static string? FindDotnet()
     {
+        var executableName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        if (Environment.GetEnvironmentVariable("DOTNET_ROOT") is { Length: > 0 } configured)
+        {
+            var configuredHost = Path.Combine(configured, executableName);
+            if (File.Exists(configuredHost)) return configuredHost;
+        }
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var candidate = Path.Combine(programFiles, "dotnet", "dotnet.exe");
         if (File.Exists(candidate))
@@ -227,7 +253,7 @@ internal sealed class ExecutionSetup
         {
             try
             {
-                var full = Path.Combine(directory.Trim(), "dotnet.exe");
+                var full = Path.Combine(directory.Trim(), executableName);
                 if (File.Exists(full))
                 {
                     return full;
@@ -256,7 +282,7 @@ internal sealed class ExecutionSetup
     private static void WriteSandboxConfig(string sandboxHome, Dictionary<string, string> filesystem)
     {
         var builder = new StringBuilder();
-        builder.Append("[windows]\nsandbox = \"unelevated\"\n\n");
+        if (OperatingSystem.IsWindows()) builder.Append("[windows]\nsandbox = \"unelevated\"\n\n");
         builder.Append("[permissions.").Append(Pins.ProfileName).Append(".network]\nenabled = true\n\n");
         builder.Append("[permissions.").Append(Pins.ProfileName).Append(".filesystem]\n");
         foreach (var (path, access) in filesystem)
@@ -416,14 +442,15 @@ internal sealed class ExecutionSetup
         {
             return [engineExecutable];
         }
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
-            var packaged = Path.GetFullPath(Path.Combine(baseDirectory, "..", "engine", "AgentDock.Engine.exe"));
+            var name = OperatingSystem.IsWindows() ? "AgentDock.Engine.exe" : "AgentDock.Engine";
+            var packaged = Path.GetFullPath(Path.Combine(baseDirectory, "..", "engine", name));
             if (File.Exists(packaged))
             {
                 return [packaged];
             }
-            var standalone = Path.Combine(baseDirectory, "AgentDock.Engine.exe");
+            var standalone = Path.Combine(baseDirectory, name);
             if (File.Exists(standalone))
             {
                 return [standalone];
@@ -453,6 +480,8 @@ internal sealed class ExecutionSetup
         // The self-contained runner extracts native libraries before its managed entry point.
         environment["TEMP"] = Path.Combine(runtime, "tmp");
         environment["TMP"] = Path.Combine(runtime, "tmp");
+        if (OperatingSystem.IsMacOS()) environment["TMPDIR"] = Path.Combine(runtime, "tmp");
+        environment["DOTNET_EnableDiagnostics"] = "0";
         environment["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.Combine(runtime, "bundle");
         var dotnet = FindDotnet();
         if (dotnet is not null)
@@ -491,7 +520,13 @@ internal sealed class ExecutionSetup
         }
         environment["CODEX_HOME"] = sandboxHome;
         environment["PATH"] = codexPathDirectory + Path.PathSeparator + environment.GetValueOrDefault("PATH", "");
-        environment["BUN_INSPECT_PRELOAD"] = Path.Combine(runtime, "opencode_pipe_compat.cjs");
+        if (OperatingSystem.IsWindows()) environment["BUN_INSPECT_PRELOAD"] = Path.Combine(runtime, "opencode_pipe_compat.cjs");
+        if (OperatingSystem.IsMacOS())
+        {
+            environment["TMPDIR"] = Path.Combine(runtime, "tmp");
+            environment["SHELL"] = shellPath;
+        }
+        environment["DOTNET_EnableDiagnostics"] = "0";
         environment["OPENCODE_CONFIG"] = Path.Combine(sandboxHome, "opencode.json");
         environment["OPENCODE_GIT_BASH_PATH"] = shellPath;
         environment["DOTNET_CLI_HOME"] = Path.Combine(runtime, "home");
@@ -521,13 +556,14 @@ internal sealed class ExecutionSetup
 
     private static Dictionary<string, string> FilteredParentEnvironment(IEnumerable<string> names)
     {
-        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var environment = new Dictionary<string, string>(comparer);
         foreach (System.Collections.DictionaryEntry pair in Environment.GetEnvironmentVariables())
         {
             var name = (string)pair.Key;
-            if (names.Contains(name, StringComparer.OrdinalIgnoreCase) && pair.Value is string value && value.Length > 0)
+            if (names.Contains(name, comparer) && pair.Value is string value && value.Length > 0)
             {
-                environment[name.ToUpperInvariant()] = value;
+                environment[OperatingSystem.IsWindows() ? name.ToUpperInvariant() : name] = value;
             }
         }
         return environment;

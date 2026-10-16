@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="AgentDock.Engine.Tests" />
+    <InternalsVisibleTo Include="AgentDock.Tests" />
   </ItemGroup>
 
 </Project>
