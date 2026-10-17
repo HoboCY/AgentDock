@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="AgentDock.Tests" />
     <ProjectReference Include="../AgentDock.Core/AgentDock.Core.csproj" />
     <ProjectReference Include="../AgentDock.Engine/AgentDock.Engine.csproj" />
   </ItemGroup>

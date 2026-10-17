@@ -4,9 +4,13 @@ namespace AgentDock.Engine.Tests;
 
 public static class MacCrashFixture
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        if (!OperatingSystem.IsMacOS() || args.Length != 2 || args[0] != "--mac-crash-fixture") return;
+        if (args.Length == 2 && args[0] == BlockingIoFixture.Argument)
+        {
+            return BlockingIoFixture.Run(args[1]);
+        }
+        if (!OperatingSystem.IsMacOS() || args.Length != 2 || args[0] != "--mac-crash-fixture") return 0;
         var root = ProjectPaths.Canonicalize(args[1]);
         var project = Path.Combine(root, "project");
         Directory.CreateDirectory(project);
@@ -22,5 +26,6 @@ public static class MacCrashFixture
             ScriptedModel.Text("UNEXPECTED_COMPLETION")));
         var engine = new OpenCodeEngine(root, () => "synthetic-key-not-real", new EngineHooks { RelayTransport = handler });
         await engine.ExecuteAsync(task, _ => { }, CancellationToken.None);
+        return 0;
     }
 }

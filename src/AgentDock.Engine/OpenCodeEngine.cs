@@ -43,6 +43,14 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
         }
     }
 
+    // These native pipe reads/writes and exit waits block for the job's lifetime.
+    // Dedicated threads keep them from starving Host requests and relay continuations.
+    private static Task RunBlockingIo(Action operation) => Task.Factory.StartNew(operation, CancellationToken.None,
+        TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+
+    private static Task<T> RunBlockingIo<T>(Func<T> operation) => Task.Factory.StartNew(operation, CancellationToken.None,
+        TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach, TaskScheduler.Default);
+
     private const int MaxPromptBytes = 1024 * 1024;
     private const int MaxErrorLength = 8_000;
     private const string ChangesDisclaimer =
@@ -154,7 +162,7 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
             }, job);
 
             var prompt = task.Prompt ?? "";
-            _ = Task.Run(() =>
+            _ = RunBlockingIo(() =>
             {
                 try
                 {
@@ -179,7 +187,7 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
 
             long consumedMeasurement = 0;
             var reportFailure = (Exception?)null;
-            var stdoutTask = Task.Run(() =>
+            var stdoutTask = RunBlockingIo(() =>
             {
                 try
                 {
@@ -214,9 +222,9 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
                     reportFailure = error;
                 }
             });
-            var stderrTask = Task.Run(() => ReadTail(job.Stderr, 8_000));
+            var stderrTask = RunBlockingIo(() => ReadTail(job.Stderr, 8_000));
 
-            var exitTask = Task.Run(() => job.WaitForExit(-1));
+            var exitTask = RunBlockingIo(() => job.WaitForExit(-1));
             await exitTask.ConfigureAwait(false);
             await stdoutTask.ConfigureAwait(false);
             if (reportFailure is not null)

@@ -29,6 +29,7 @@ public sealed class ResultWindow : Window
         MinWidth = 640;
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowPlacement.KeepOnScreen(this);
         _refresh = new Button { Content = "刷新", MinHeight = 28, Padding = new Thickness(12, 4) };
         _refresh.Click += async (_, _) => await LoadAsync();
 

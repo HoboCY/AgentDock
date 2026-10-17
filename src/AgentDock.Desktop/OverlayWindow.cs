@@ -116,9 +116,7 @@ public sealed class OverlayWindow : Window
 
     private void PlaceBottomRight()
     {
-        var area = Screens.Primary?.WorkingArea ?? default;
-        if (area.Width <= 0) return;
-        Position = new PixelPoint(area.X + area.Width - (int)Width - 28, area.Y + area.Height - (int)Height - 28);
+        WindowPlacement.BottomRight(this, 28);
     }
 
     private static Button Small(string text) => new()

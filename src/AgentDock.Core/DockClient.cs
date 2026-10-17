@@ -17,7 +17,7 @@ public sealed class DockClient(string? home = null, string? hostExecutable = nul
 
     public async Task EnsureHostAsync(CancellationToken cancellationToken = default)
     {
-        try { await InvokeAsync<HostStatus>("status", cancellationToken: cancellationToken); return; }
+        try { await InvokeCoreAsync<HostStatus>("status", null, 700, cancellationToken); return; }
         catch (Exception ex) when (ex is TimeoutException or IOException) { }
         InstallState.RequireAvailable(Home);
         var executable = (OperatingSystem.IsMacOS() ? InstallState.CurrentHost(Home) : null) ??
@@ -35,17 +35,22 @@ public sealed class DockClient(string? home = null, string? hostExecutable = nul
         var until = DateTime.UtcNow.AddSeconds(20);
         while (DateTime.UtcNow < until)
         {
-            try { await InvokeAsync<HostStatus>("status", cancellationToken: cancellationToken); return; }
+            try { await InvokeCoreAsync<HostStatus>("status", null, 700, cancellationToken); return; }
             catch (Exception ex) when (ex is TimeoutException or IOException) { }
             await Task.Delay(200, cancellationToken);
         }
         throw new DockException("HostUnavailable", "后台未能启动；请检查安装和数据目录。已有任务不会自动重新派发。");
     }
 
-    public async Task<T> InvokeAsync<T>(string method, object? parameters = null, CancellationToken cancellationToken = default)
+    public Task<T> InvokeAsync<T>(string method, object? parameters = null, CancellationToken cancellationToken = default) =>
+        InvokeCoreAsync<T>(method, parameters, 3000, cancellationToken);
+
+    private async Task<T> InvokeCoreAsync<T>(string method, object? parameters, int connectTimeoutMs, CancellationToken cancellationToken)
     {
         using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        await pipe.ConnectAsync(700, cancellationToken);
+        // Allow a briefly busy listener to recover before sending anything. Never replay a written request.
+        // Host discovery keeps its short probe above so a stopped Host still starts promptly.
+        await pipe.ConnectAsync(connectTimeoutMs, cancellationToken);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
         using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
         var token = await File.ReadAllTextAsync(Path.Combine(Home, "connection.token"), cancellationToken);

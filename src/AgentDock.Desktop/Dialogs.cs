@@ -71,7 +71,13 @@ public sealed class ToastWindow : Window
         };
         border.PointerPressed += (_, _) => { onClick(); Close(); };
         Content = border;
-        Opened += (_, _) => PositionBottomRight();
+        Opened += (_, _) =>
+        {
+            if (OperatingSystem.IsWindows())
+                Dispatcher.UIThread.Post(PositionBottomRight, DispatcherPriority.Loaded);
+            else
+                PositionBottomRight();
+        };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         timer.Tick += (_, _) => { timer.Stop(); Close(); };
         Closed += (_, _) => timer.Stop();
@@ -80,9 +86,6 @@ public sealed class ToastWindow : Window
 
     private void PositionBottomRight()
     {
-        var area = Screens.Primary?.WorkingArea ?? default;
-        if (area.Width <= 0) return;
-        var height = Bounds.Height > 10 ? Bounds.Height : 64;
-        Position = new PixelPoint(area.X + area.Width - (int)Width - 24, area.Y + area.Height - (int)height - 24);
+        WindowPlacement.BottomRight(this, 24);
     }
 }

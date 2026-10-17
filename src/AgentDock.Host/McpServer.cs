@@ -71,8 +71,15 @@ public sealed class McpServer(DockClient client)
         }
         catch (Exception ex)
         {
-            var code = ex is DockException dock ? dock.Code : "Unavailable";
-            var message = ex is DockException known ? known.Message : "后台不可达或参数无效；重连不会重新执行原任务。";
+            var (code, message) = ex switch
+            {
+                DockException dock => (dock.Code, dock.Message),
+                TimeoutException => ("HostConnectionTimeout", "后台连接等待超时；此次调用尚未发送，请稍后查询原任务状态。"),
+                OperationCanceledException when cancellationToken.IsCancellationRequested => ("Cancelled", "调用已取消；已有任务不会因此自动停止或重新执行。"),
+                OperationCanceledException => ("HostResponseTimeout", "等待后台响应超时；请查询原任务状态，不要用新请求重复派发。"),
+                IOException => ("HostTransportError", "后台通信中断；请查询原任务状态，不要用新请求重复派发。"),
+                _ => ("Unavailable", "后台不可达或参数无效；重连不会重新执行原任务。")
+            };
             return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(new { code, message }) } }, isError = true };
         }
     }

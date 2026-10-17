@@ -95,7 +95,6 @@ public static class Program
     private static async Task ServeAsync(string pipeName, HostApplication application, string token)
     {
         using var cancellation = new CancellationTokenSource();
-        var clients = new List<Task>();
         var maintenance = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
@@ -104,24 +103,34 @@ public static class Program
             catch (OperationCanceledException) { }
         });
         application.Exiting += () => cancellation.Cancel();
+        try { await AcceptClientsAsync(pipeName, pipe => HandleAsync(pipe, application, token), cancellation.Token); }
+        finally { cancellation.Cancel(); await maintenance; }
+    }
+
+    internal static async Task AcceptClientsAsync(string pipeName, Func<NamedPipeServerStream, Task> handle,
+        CancellationToken cancellationToken)
+    {
+        var clients = new List<Task>();
         NamedPipeServerStream NewListener() => new(pipeName, PipeDirection.InOut, 32, PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         var listener = NewListener();
         try
         {
-            while (!cancellation.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await listener.WaitForConnectionAsync(cancellation.Token);
+                await listener.WaitForConnectionAsync(cancellationToken);
                 var pipe = listener;
                 // On Unix the last disposed instance removes the shared socket.
                 // Retain the next listener before a fast request can finish.
                 listener = NewListener();
                 clients.RemoveAll(x => x.IsCompleted);
-                clients.Add(HandleAsync(pipe, application, token));
+                // An async handler can execute synchronous lock/disk work before its first yield.
+                // Dispatch it separately so that work cannot stop the pipe accept loop.
+                clients.Add(Task.Run(() => handle(pipe)));
             }
         }
         catch (OperationCanceledException) { }
-        finally { listener.Dispose(); cancellation.Cancel(); await maintenance; await Task.WhenAll(clients); }
+        finally { listener.Dispose(); await Task.WhenAll(clients); }
     }
 
     private static async Task HandleAsync(NamedPipeServerStream pipe, HostApplication application, string token)

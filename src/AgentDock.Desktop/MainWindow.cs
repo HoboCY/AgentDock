@@ -66,6 +66,7 @@ public sealed class MainWindow : Window
         MinWidth = 900;
         MinHeight = 540;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowPlacement.KeepOnScreen(this);
 
         _startButton = MakeButton("启动后台", () => _app.StartHostAsync());
         _overlayButton = MakeButton("显示悬浮窗", () => { _app.ToggleOverlay(); RefreshHeader(); return Task.CompletedTask; });
@@ -87,6 +88,7 @@ public sealed class MainWindow : Window
         };
         _overlayTopmost.IsCheckedChanged += (_, _) => _app.UpdateOverlayPrefs(_overlayTopmost.IsChecked == true, _overlayOpacity.Value);
 
+        NameNumericEditor(_concurrency, "全局并发上限");
         Content = BuildLayout();
         _state.Changed += Refresh;
         _taskList.SelectionChanged += (_, _) => UpdateSelection();
@@ -288,7 +290,7 @@ public sealed class MainWindow : Window
             var prompt = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 58, FontSize = 12.5 };
             var timeout = new NumericUpDown { Minimum = 1, Maximum = 86400, Increment = 60, Width = 130, Value = 1200 };
             AutomationProperties.SetName(prompt, "角色提示词 " + role);
-            AutomationProperties.SetName(timeout, "角色超时秒数 " + role);
+            NameNumericEditor(timeout, "角色超时秒数 " + role);
             _rolePrompts[role] = prompt;
             _roleTimeouts[role] = timeout;
             var row = new Grid
@@ -309,6 +311,17 @@ public sealed class MainWindow : Window
             panel.Children.Add(row);
         }
         return new StackPanel { Spacing = 4, Children = { panel, Hint("提示词描述工作要求，不改变执行权限；超时范围 1–86400 秒。") } };
+    }
+
+    private static void NameNumericEditor(NumericUpDown control, string name)
+    {
+        AutomationProperties.SetName(control, name);
+        control.TemplateApplied += (_, args) =>
+        {
+            // Windows focuses the template's TextBox; its automation name is not inherited.
+            if (args.NameScope.Find<TextBox>("PART_TextBox") is { } editor)
+                AutomationProperties.SetName(editor, name);
+        };
     }
 
     private Control BuildNotificationSettings()
@@ -618,7 +631,7 @@ public sealed class MainWindow : Window
         Children = { new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, FontSize = 13 }, content }
     };
 
-    private static Control ExpanderSection(string title, Control content) => new Expander { Header = title, Content = content, IsExpanded = false };
+    private static Control ExpanderSection(string title, Control content) => new Expander { Header = title, Content = content, IsExpanded = false, HorizontalContentAlignment = HorizontalAlignment.Stretch };
 
     private static TextBlock Hint(string text) => new() { Text = text, Opacity = .65, FontSize = 12, TextWrapping = TextWrapping.Wrap };
 }
