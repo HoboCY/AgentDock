@@ -377,6 +377,9 @@ if ($script:PayloadPath) {
         $machine = Get-Content -Raw -LiteralPath (Join-Path $root 'install/machine.json') | ConvertFrom-Json
         Assert-True ($machine.shellSource -eq 'bundled') 'machine.json 应指向内置 Git'
         Assert-True ($machine.shellPath -eq [IO.Path]::GetFullPath($shExe)) 'machine.json shellPath 不符'
+        if ($shSpec) {
+            Assert-True (([string]$machine.shellSha256).ToLowerInvariant() -eq ([string]$shSpec.sha256).ToLowerInvariant()) 'machine.json shellSha256 不符'
+        }
     }
 } else {
     Write-Host '跳过 real-payload-bundles-verified-git（未提供 -Payload）。' -ForegroundColor Yellow
