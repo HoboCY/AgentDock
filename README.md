@@ -25,6 +25,8 @@ pwsh -File scripts/Build-Package.ps1 -Version 0.1.0 -Runtime win-x64
 
 开发时可分别启动 `AgentDock.Host --host --home <独立数据目录>` 和 `AgentDock.Desktop --home <同一目录>`。桌面旁缺少打包的 Host 时，设置 `AGENTDOCK_HOST` 为开发 Host 可执行文件绝对路径。普通启动不自动保存凭据或派发任务。
 
+桌面使用 ShadUI 0.1.6，保持 Avalonia 11.3.22。新版采用深墨绿侧栏、双行任务列表与右侧详情，窄窗口自动收起详情并保留任务操作；设置按接入、桌面、维护分区。[实际界面](docs/design/agentdock-ui-v2-implemented.png)、[设计稿与提示词](docs/design/agentdock-ui-v2-prompt.md)、验证与运行方式见 [ShadUI 重构记录](docs/validation/shadui.md)。
+
 ## 结构
 
 | 模块 | 职责 |

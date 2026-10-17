@@ -1,0 +1,145 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <Color x:Key="PrimaryColor">#256D60</Color>
+          <Color x:Key="PrimaryColor75">#BF256D60</Color>
+          <Color x:Key="PrimaryColor50">#80256D60</Color>
+          <Color x:Key="PrimaryColor10">#19256D60</Color>
+          <Color x:Key="ForegroundColor">#20312C</Color>
+          <Color x:Key="ForegroundLeadColor">#697A73</Color>
+          <Color x:Key="BorderColor">#CEDBD3</Color>
+          <Color x:Key="OutlineColor">#DEE6E1</Color>
+          <Color x:Key="GhostColor">#EAF2ED</Color>
+          <Color x:Key="GhostHoverColor">#EDF4F0</Color>
+          <Color x:Key="TitleBarBackgroundColor">#F6F8F6</Color>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+  <Style Selector=":is(Window)">
+    <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, PingFang SC, sans-serif" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <Style Selector="TextBlock.pageTitle">
+    <Setter Property="FontSize" Value="30" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="#20312C" />
+  </Style>
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="#697A73" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="LineHeight" Value="19" />
+  </Style>
+  <Style Selector="TextBlock.metric">
+    <Setter Property="FontSize" Value="27" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="#20312C" />
+  </Style>
+  <Style Selector="Button">
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="14,8" />
+  </Style>
+  <Style Selector="Button:focus-visible">
+    <Setter Property="BorderBrush" Value="#49947F" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="Button.sidebarAction">
+    <Setter Property="Foreground" Value="#D7E7E1" />
+    <Setter Property="Padding" Value="12,9" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Button.sidebarAction:pointerover">
+    <Setter Property="Background" Value="#2B4840" />
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="Button.dangerOutline">
+    <Setter Property="Foreground" Value="#AB4338" />
+    <Setter Property="BorderBrush" Value="#DEC2BB" />
+  </Style>
+  <!-- Keep TabItem selection, keyboard and UIA semantics in the sidebar. -->
+  <Style Selector="TabControl.workspace">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="TabStripPlacement" Value="Left" />
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
+    </Setter>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="200,*">
+          <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
+                          VerticalAlignment="Top" Margin="12,116,12,0" />
+          <ContentPresenter Grid.Column="1" Name="PART_SelectedContentHost"
+                            Content="{TemplateBinding SelectedContent}"
+                            ContentTemplate="{TemplateBinding SelectedContentTemplate}"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="TabControl.workspace TabItem">
+    <Setter Property="Foreground" Value="#C5D8D0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="16,13" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" CornerRadius="7"
+                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+          <ContentPresenter Name="PART_HeaderPresenter" Content="{TemplateBinding Header}"
+                            ContentTemplate="{TemplateBinding HeaderTemplate}" Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Left" VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="TabControl.workspace TabItem:pointerover">
+    <Setter Property="Background" Value="#28423B" />
+  </Style>
+  <Style Selector="TabControl.workspace TabItem:selected">
+    <Setter Property="Background" Value="#2D5147" />
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="TabControl.workspace TabItem:focus-visible">
+    <Setter Property="BorderBrush" Value="#81BAA7" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="ListBox.taskTable">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="ListBox.taskTable ListBoxItem">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Padding" Value="16,12" />
+    <Setter Property="Margin" Value="0,0,0,7" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="#E3EAE5" />
+    <Setter Property="Background" Value="White" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+  <Style Selector="ListBox.taskTable ListBoxItem:selected">
+    <Setter Property="BorderBrush" Value="#91BCAF" />
+  </Style>
+  <Style Selector="ListBox.taskTable ListBoxItem /template/ Border#SelectionBackground">
+    <Setter Property="Background" Value="#E7F1EB" />
+  </Style>
+  <Style Selector="ListBox.taskTable ListBoxItem /template/ Border#HoverBackground">
+    <Setter Property="Background" Value="#EFF5F1" />
+  </Style>
+  <Style Selector="ListBox.taskTable ListBoxItem /template/ PathIcon#CheckSelected">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Expander.settingsGroup">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+</Styles>

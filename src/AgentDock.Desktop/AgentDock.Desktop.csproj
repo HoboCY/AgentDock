@@ -3,7 +3,8 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <!-- ShadUI 0.1.6 targets Avalonia 11; 0.2.x requires Avalonia 12. -->
+    <PackageReference Include="ShadUI" Version="0.1.6" />
     <ProjectReference Include="../AgentDock.Core/AgentDock.Core.csproj" />
   </ItemGroup>
 </Project>

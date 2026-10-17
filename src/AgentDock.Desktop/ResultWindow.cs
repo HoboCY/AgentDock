@@ -6,14 +6,14 @@ using Avalonia.Media;
 namespace AgentDock.Desktop;
 
 /// <summary>任务结果窗口：摘要、正文可用状态、结果与事件，只读。</summary>
-public sealed class ResultWindow : Window
+public sealed class ResultWindow : ShadUI.Window
 {
     private readonly AppState _state;
-    private readonly TextBlock _head = new() { FontSize = 15, FontWeight = FontWeight.SemiBold };
-    private readonly TextBlock _meta = new() { TextWrapping = TextWrapping.Wrap, Opacity = .85, FontSize = 12.5 };
+    private readonly TextBlock _head = new() { FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _meta = new() { TextWrapping = TextWrapping.Wrap, Foreground = Ui.Muted, FontSize = 12.5 };
     private readonly TextBlock _bodyState = new() { FontSize = 12, Foreground = new SolidColorBrush(Color.Parse("#B26A00")), TextWrapping = TextWrapping.Wrap };
-    private readonly TextBox _result = new() { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, FontSize = 12.5 };
-    private readonly ListBox _events = new();
+    private readonly TextBox _result = new() { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, FontSize = 13, Padding = new Thickness(16), FontFamily = new FontFamily("Cascadia Mono, Consolas, Menlo, monospace") };
+    private readonly ListBox _events = new() { BorderThickness = new Thickness(0), Background = Brushes.Transparent };
     private readonly Button _refresh;
 
     public string TaskId { get; }
@@ -28,10 +28,15 @@ public sealed class ResultWindow : Window
         Height = 580;
         MinWidth = 640;
         MinHeight = 420;
+        Background = Ui.Canvas;
+        Ui.ConfigureWindow(this);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         WindowPlacement.KeepOnScreen(this);
-        _refresh = new Button { Content = "刷新", MinHeight = 28, Padding = new Thickness(12, 4) };
+        _refresh = Ui.Button("刷新");
         _refresh.Click += async (_, _) => await LoadAsync();
+        // ShadUI gives the inner editor its own height; follow the available
+        // result area so multiline content can scroll instead of being clipped.
+        _result.Bind(ShadUI.ControlAssist.HeightProperty, new Avalonia.Data.Binding("Bounds.Height") { Source = _result });
 
         var top = new Grid
         {
@@ -46,9 +51,9 @@ public sealed class ResultWindow : Window
         top.Children.Add(_head);
         top.Children.Add(_refresh);
 
-        var resultLabel = new TextBlock { Text = "结果", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 4) };
-        var eventsLabel = new TextBlock { Text = "事件", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 10, 0, 4) };
-        var root = new Grid { Margin = new Thickness(16), RowSpacing = 4 };
+        var resultLabel = new TextBlock { Text = "执行结果", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) };
+        var eventsLabel = new TextBlock { Text = "执行记录", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 4) };
+        var root = new Grid { Margin = new Thickness(24), RowSpacing = 8 };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -62,14 +67,22 @@ public sealed class ResultWindow : Window
         Grid.SetRow(resultLabel, 3);
         Grid.SetRow(_result, 4);
         Grid.SetRow(eventsLabel, 5);
-        Grid.SetRow(_events, 6);
+        var eventFrame = Ui.Card(_events, new Thickness(6));
+        Grid.SetRow(eventFrame, 6);
+        _events.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<string>((line, _) => new TextBlock
+        {
+            Text = line, TextWrapping = TextWrapping.Wrap, FontSize = 12,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas, Menlo, monospace")
+        });
+        Avalonia.Automation.AutomationProperties.SetName(_result, "任务结果正文");
+        Avalonia.Automation.AutomationProperties.SetName(_events, "任务执行记录");
         root.Children.Add(top);
         root.Children.Add(_meta);
         root.Children.Add(_bodyState);
         root.Children.Add(resultLabel);
         root.Children.Add(_result);
         root.Children.Add(eventsLabel);
-        root.Children.Add(_events);
+        root.Children.Add(eventFrame);
         Content = root;
         Opened += async (_, _) => await LoadAsync();
     }

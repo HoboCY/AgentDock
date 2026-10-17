@@ -41,8 +41,30 @@ try {
         [IO.Directory]::CreateDirectory($dataHome) | Out-Null
         $fixtureProject = Join-Path $Output 'row-fixture'
         [IO.Directory]::CreateDirectory($fixtureProject) | Out-Null
-        $now = [DateTimeOffset]::UtcNow.ToString('O')
-        @{ schema=1; tasks=@{ 'desktop-row-fixture'=@{ id='desktop-row-fixture'; requestId='desktop-row-regression'; project=$fixtureProject; title='列表刷新回归'; role='explorer'; status='Completed'; acceptedAt=$now; startedAt=$now; finishedAt=$now; result='Synthetic persisted UI fixture'; bodyAvailable=$true } }; requests=@{} } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $dataHome 'tasks.json') -Encoding utf8
+        # Synthetic persisted records only. Paused/terminal states never dispatch an engine.
+        # Include two projects, known/unknown usage, long text and errors for layout checks.
+        $now = [DateTimeOffset]::UtcNow
+        $fixtureTasks = @{}
+        $fixtureRequests = @{}
+        $titles = @('重构任务工作台', '检查 IPC 连接状态', '验证 Windows 安装包', '整理角色配置与超时策略：验证长标题在较窄工作区中的显示', '更新使用文档')
+        $states = @('Paused', 'Completed', 'Completed', 'Failed', 'Completed')
+        $roles = @('worker', 'explorer', 'verifier', 'reviewer', 'default')
+        for ($i = 0; $i -lt $titles.Count; $i++) {
+            $id = 'desktop-design-fixture-' + $i
+            $fixtureRequests[$id] = @{ id=$id; fingerprint='synthetic-ui-design-probe'; status=$states[$i] }
+            $fixtureTasks[$id] = @{
+                id=$id; requestId=$id; project=(Join-Path $fixtureProject $(if ($i -eq 4) { 'DesktopTools' } else { 'AgentDock' }))
+                title=$titles[$i]; role=$roles[$i]; status=$states[$i]
+                acceptedAt=$now.AddMinutes(-28 - $i * 10).ToString('O'); startedAt=$now.AddMinutes(-27 - $i * 10).ToString('O')
+                finishedAt=$(if ($i -eq 0) { $null } else { $now.AddMinutes(-20 - $i * 10).ToString('O') })
+                inputTokens=$(if ($i -eq 3) { $null } else { 62100 - $i * 9200 })
+                outputTokens=$(if ($i -eq 3) { $null } else { 8400 - $i * 1300 })
+                generationTokensPerSecond=$(if ($i -eq 3) { $null } else { 312 - $i * 18 })
+                error=$(if ($i -eq 3) { '合成错误：用于验证错误提示与未知用量，不代表实际任务失败。' } else { $null })
+                result="Synthetic UI fixture. No model was called. Task: $($titles[$i])"; bodyAvailable=$true
+            }
+        }
+        @{ schema=1; tasks=$fixtureTasks; requests=$fixtureRequests } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $dataHome 'tasks.json') -Encoding utf8
     }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $hostProcess = Start-App $HostPath @('--host','--home',$dataHome)
@@ -70,8 +92,8 @@ try {
     if ($after.processId -ne $status.processId) { throw 'Desktop close replaced the background host.' }
     $afterHash = if (Test-Path -LiteralPath $originalConfig) { (Get-FileHash -LiteralPath $originalConfig).Hash } else { $null }
     if ($beforeHash -ne $afterHash) { throw 'Existing Codex configuration changed during probe.' }
-    @{ at=[DateTimeOffset]::Now; os=[Environment]::OSVersion.VersionString; host=$hostSample; desktop=$smoke; existingCodexConfigUnchanged=$true; taskSource=$(if ($SeedTasks) { 'Synthetic persisted completed task; no task execution or real model calls' } else { 'No real model calls or task submissions' }); hostSurvivedDesktopExit=$true } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $Output 'result.json') -Encoding utf8
-    Invoke-Dock 'shutdown' @{confirm=$false} | Out-Null
+    @{ at=[DateTimeOffset]::Now; os=[Environment]::OSVersion.VersionString; host=$hostSample; desktop=$smoke; existingCodexConfigUnchanged=$true; taskSource=$(if ($SeedTasks) { 'Synthetic persisted paused and terminal tasks; no task execution or real model calls' } else { 'No real model calls or task submissions' }); hostSurvivedDesktopExit=$true } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $Output 'result.json') -Encoding utf8
+    Invoke-Dock 'shutdown' @{confirm=[bool]$SeedTasks} | Out-Null
     if (!$hostProcess.WaitForExit(10000)) { throw 'Host failed to stop.' }
     Get-Content -LiteralPath (Join-Path $Output 'result.json') -Raw
 } finally {

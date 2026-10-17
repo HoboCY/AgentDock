@@ -2,7 +2,8 @@ using AgentDock.Core;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Themes.Fluent;
+using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Styling;
 using Avalonia.Threading;
 
 namespace AgentDock.Desktop;
@@ -25,7 +26,15 @@ public sealed class App : Application
     public bool TrayCreated => _tray is not null;
     public double? MainOpenedMilliseconds { get; private set; }
 
-    public override void Initialize() => Styles.Add(new FluentTheme());
+    public override void Initialize()
+    {
+        RequestedThemeVariant = ThemeVariant.Light;
+        Styles.Add(new ShadUI.ShadTheme());
+        Styles.Add(new StyleInclude(new Uri("avares://AgentDock.Desktop/"))
+        {
+            Source = new Uri("avares://AgentDock.Desktop/DesktopStyles.axaml")
+        });
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

@@ -30,6 +30,7 @@ public sealed class OverlayWindow : Window
         Background = Brushes.Transparent;
         Topmost = true;
         Opacity = .88;
+        RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
 
         var title = new TextBlock { Text = "AgentDock", FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
         var header = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } } };
@@ -41,7 +42,7 @@ public sealed class OverlayWindow : Window
         var open = Small("主面板");
         open.Click += (_, _) => _app.ShowMain();
         var hide = Small("收起");
-        hide.Click += (_, _) => Hide();
+        hide.Click += (_, _) => _app.ToggleOverlay();
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right, Children = { hide, open } };
 
         var body = new ScrollViewer { Content = _tasks, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
@@ -49,7 +50,9 @@ public sealed class OverlayWindow : Window
         {
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(12),
-            Background = new SolidColorBrush(Color.FromArgb(236, 20, 23, 30)),
+            Background = Ui.Brush("#F0182B28"),
+            BorderBrush = Ui.Brush("#44665B"),
+            BorderThickness = new Thickness(1),
             Child = new Grid
             {
                 RowDefinitions =
@@ -125,6 +128,8 @@ public sealed class OverlayWindow : Window
         FontSize = 12,
         Padding = new Thickness(8, 2),
         MinHeight = 24,
+        Classes = { "Ghost" },
+        Foreground = Brushes.White,
         Background = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255))
     };
 }

@@ -7,26 +7,32 @@ using Avalonia.Threading;
 namespace AgentDock.Desktop;
 
 /// <summary>确认对话框：完全退出等需要明确确认的操作。</summary>
-public sealed class ConfirmWindow : Window
+public sealed class ConfirmWindow : ShadUI.Window
 {
     private ConfirmWindow(string title, string message)
     {
         Title = title;
-        Width = 460;
+        Width = 500;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
+        CanMaximize = false;
+        CanMinimize = false;
+        Ui.ConfigureWindow(this);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var confirm = new Button { Content = "确认", MinWidth = 88 };
-        var cancel = new Button { Content = "取消", MinWidth = 88 };
+        var confirm = Ui.Button("确认", "Destructive");
+        var cancel = Ui.Button("取消");
+        confirm.MinWidth = cancel.MinWidth = 88;
+        cancel.IsCancel = true;
         confirm.Click += (_, _) => Close(true);
         cancel.Click += (_, _) => Close(false);
         Content = new StackPanel
         {
-            Margin = new Thickness(18),
-            Spacing = 16,
+            Margin = new Thickness(24),
+            Spacing = 20,
             Children =
             {
-                new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, FontSize = 13 },
+                new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, FontSize = 20 },
+                new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, FontSize = 13, LineHeight = 22 },
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -36,6 +42,7 @@ public sealed class ConfirmWindow : Window
                 }
             }
         };
+        Opened += (_, _) => cancel.Focus();
     }
 
     public static Task<bool> AskAsync(Window owner, string title, string message) =>
@@ -52,21 +59,25 @@ public sealed class ToastWindow : Window
         ShowInTaskbar = false;
         ShowActivated = false;
         Topmost = true;
-        Width = 330;
+        Width = 350;
         SizeToContent = SizeToContent.Height;
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         var border = new Border
         {
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(14, 12),
-            Background = new SolidColorBrush(failure ? Color.FromArgb(242, 96, 28, 28) : Color.FromArgb(242, 28, 32, 40)),
-            Child = new TextBlock
+            CornerRadius = new CornerRadius(10),
+            BorderBrush = Ui.Brush(failure ? "#FECACA" : "#3F3F46"),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(16),
+            Background = Ui.Brush("#F518181B"),
+            Child = new StackPanel
             {
-                Text = message,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Brushes.White,
-                FontSize = 13
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock { Text = failure ? "AgentDock · 需要处理" : "AgentDock", FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = Ui.Brush(failure ? "#FCA5A5" : "#D4D4D8") },
+                    new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White, FontSize = 13 }
+                }
             }
         };
         border.PointerPressed += (_, _) => { onClick(); Close(); };
