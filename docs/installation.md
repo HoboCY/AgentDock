@@ -33,7 +33,17 @@
   data\                  用户数据（安装/更新/卸载都不删除）
 ```
 
-4. 首次启动后，若顶部显示后台未连接，先点击「启动后台」，等待显示「后台运行中」，再到「设置」保存 OpenCode Go 凭据和角色。**AgentDock 全新配置，不迁移旧凭据或角色**；旧 MCP 配置仅用于只读共存提示，系统登录自启默认关闭。后台未运行时保存凭据会超时；启动后台后可重试保存。
+4. 首次启动进入「开始使用」，依次完成：启动后台 → 保存 OpenCode Go API Key → 接入 Codex → 启用全局委派。可点击「稍后配置」进入任务页；未完成时下次启动继续显示引导，完成后默认进入任务页。可随时从「开始使用」或「设置 → 打开配置引导」重新进入。
+5. 凭据已存在时可直接继续，输入新值才会替换。保存后立即刷新状态并清空输入；“已保存”仅确认本机存储，不代表 API Key 有效或未过期。是否可执行以真实任务结果为准。**AgentDock 全新配置，不迁移旧凭据或角色**；系统登录自启默认关闭。
+6. 引导可自动查找 Codex 桌面版自带程序，即使终端没有 `codex` 命令也能接入；找不到时可选择已安装的 Codex 程序。插件状态显示“已注册并启用”，并不代表当前 Codex 对话已经载入工具。配置后重启 Codex 并新建对话。
+
+全局委派首次仅在点击「启用全局委派并完成」时启用：优先使用 `CODEX_HOME`（默认 `~/.codex`）中非空的 `AGENTS.override.md`，否则使用 `AGENTS.md`，不会新建覆盖文件。受控区块之外的内容保留；可从引导最后一步「关闭全局委派并恢复原规则」。恢复记录保存在 AgentDock 数据目录 `onboarding-routing-backup.json`，引导完成记录在 `onboarding.json`。
+
+启动主面板或重新检查配置时，会更新已启用、内容完整且恢复记录匹配的旧 AgentDock 托管规则；未启用或已关闭的规则不会自动开启。升级保留原区块、文件编码和换行，并可在中断后继续恢复。新版派发说明通过后台 `status.executionProfile` 读取实际模型和推理强度，不套用 Codex 原生子代理 TOML。旧后台没有这些字段时，只有核实执行配置后才能填值，不能凭主模型猜测。
+
+启用后，适合独立完成的五类子任务使用 AgentDock，主模型、认证及原生 architect 保持不变。规则影响所有项目，仍遵守各项目限制。已有未知委派规则、手动修改区块或切换生效文件时会提示冲突，不自动覆盖。只识别并可恢复既有的“等待用户选择外部集成”过渡区块，不迁移旧 DeepSeek MCP 配置。
+
+角色默认提示词使用英文，分别明确 default、explorer、worker、reviewer、verifier 的职责、工作步骤、完成条件和交付要求；回复语言和格式遵循实际任务要求。内置文本集中在 `src/AgentDock.Core/RolePrompts.cs`。后台启动时只更新与 AgentDock 旧默认文本逐字一致的提示词，保留自定义内容、角色超时和其他设置。已接收的任务继续使用接收时的提示词快照；新接收任务使用更新后的配置。角色提示词不扩大执行权限。
 
 命令行方式（自动化/脚本）：
 
@@ -56,7 +66,7 @@ PowerShell 自动化应使用 `Start-Process -Wait -PassThru` 并检查 ExitCode
 
 ## 三、Codex 插件接入
 
-先完成 AgentDock 安装（安装程序会生成 `%LOCALAPPDATA%\AgentDock\plugin` 与插件所需的绝对路径清单 `runtime/install.json`），再在 Codex 中接入：
+推荐使用首次引导的「接入 Codex」。手动接入时，先完成 AgentDock 安装（安装程序会生成 `%LOCALAPPDATA%\AgentDock\plugin` 与插件所需的绝对路径清单 `runtime/install.json`），再执行：
 
 ```powershell
 codex plugin marketplace add "$env:LOCALAPPDATA\AgentDock\plugin"
@@ -103,6 +113,7 @@ AgentDockSetup-<新版本>-win-x64.exe --apply-update --payload "<新 zip 路径
 - 通过“设置 → 应用 → AgentDock”（或开始菜单）卸载；也可执行 `AgentDock.exe --uninstall`（稳定启动器内）。
 - 卸载与安装/更新共用同一门禁：存在未完成任务、后台异常或更新标记由存活进程持有时拒绝；空闲后台会先正常退出。
 - 卸载只删除程序文件、插件源目录、稳定启动器和快捷方式/注册表项；**保留 `%LOCALAPPDATA%\AgentDock\data` 用户数据**。
+- 若已启用全局委派，卸载前先在「开始使用」最后一步关闭并恢复原规则；卸载器不会改写 Codex 的全局规则文件。
 - 静默卸载带 `--silent`；自动化验证可运行 `pwsh scripts/Test-SetupGates.ps1 -SetupExe <安装程序> -Payload <payload>`。
 
 ## 六、固定版本组合

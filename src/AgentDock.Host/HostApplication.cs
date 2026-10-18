@@ -20,7 +20,7 @@ public sealed class HostApplication(TaskService service, CredentialVault vault, 
     private HostStatus Status()
     {
         var count = service.List().Count(t => t.Status.IsUnfinished());
-        return new(Program.Version, Environment.ProcessId, count, count == 0);
+        return new(Program.Version, Environment.ProcessId, count, count == 0, OpenCodeEngine.ExecutionProfile);
     }
     private ConfigurationView Configuration() => new(service.Configuration, vault.IsConfigured, CoexistenceWarnings());
 

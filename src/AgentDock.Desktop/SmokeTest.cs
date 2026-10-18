@@ -11,7 +11,7 @@ using Avalonia.Automation;
 namespace AgentDock.Desktop;
 
 /// <summary>有界 UI 集成冒烟：真实显示/隐藏主面板与悬浮窗并记录资源指标；不提交任务、不依赖后台。</summary>
-public static class SmokeTest
+public static partial class SmokeTest
 {
     private static readonly object Gate = new();
     private static bool _finished;
@@ -151,6 +151,9 @@ public static class SmokeTest
             if (Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(tab)?.GetName() != tab.Header as string)
                 throw new InvalidOperationException("Navigation tabs must expose their visible labels to accessibility tools.");
         checks.Add("navigation-tabs-named");
+        await CheckOnboardingAsync(app, outputPath, checks);
+        tabs.SelectedIndex = 0;
+        await Task.Delay(200);
         CheckTaskRows(main);
         checks.Add("task-cards-fit-workspace");
         var tasks = main.GetVisualDescendants().OfType<ListBox>().Single();

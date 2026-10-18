@@ -40,6 +40,17 @@ public sealed class HostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task StatusReportsThePinnedExecutionProfile()
+    {
+        var status = await Client.InvokeAsync<HostStatus>("status");
+
+        Assert.NotNull(status.ExecutionProfile);
+        Assert.Equal("opencode-go", status.ExecutionProfile.Provider);
+        Assert.Equal("deepseek-v4.1-flash", status.ExecutionProfile.Model);
+        Assert.Equal("max", status.ExecutionProfile.ReasoningEffort);
+    }
+
+    [Fact]
     public async Task DuplicateHostStartsReuseOneTaskOwnerAndRequireIndependentCredentials()
     {
         var first = await Client.InvokeAsync<HostStatus>("status");

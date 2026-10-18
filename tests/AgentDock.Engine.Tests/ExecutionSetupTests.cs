@@ -118,6 +118,47 @@ public sealed class ExecutionSetupTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task GeneratedConfigAndArgumentsMatchTheReportedExecutionProfile()
+    {
+        var profile = OpenCodeEngine.ExecutionProfile;
+        var (setup, relay) = await PrepareAsync("worker");
+        await using (relay)
+        {
+            try
+            {
+                var qualified = $"{profile.Provider}/{profile.Model}";
+                var openCode = JsonDocument.Parse(File.ReadAllText(Path.Combine(setup.SandboxHome, "opencode.json"))).RootElement;
+                Assert.Equal(qualified, openCode.GetProperty("model").GetString());
+                Assert.Equal(qualified, openCode.GetProperty("small_model").GetString());
+                Assert.Equal(profile.Provider, Assert.Single(openCode.GetProperty("enabled_providers").EnumerateArray()).GetString());
+                var provider = openCode.GetProperty("provider").GetProperty(profile.Provider);
+                Assert.Equal(profile.Model, Assert.Single(provider.GetProperty("whitelist").EnumerateArray()).GetString());
+                var model = provider.GetProperty("models").GetProperty(profile.Model);
+                Assert.Equal(profile.ReasoningEffort, model.GetProperty("options").GetProperty("reasoningEffort").GetString());
+                Assert.Equal(profile.ReasoningEffort,
+                    model.GetProperty("variants").GetProperty(profile.ReasoningEffort).GetProperty("reasoningEffort").GetString());
+                var agent = openCode.GetProperty("agent").GetProperty("delegated");
+                Assert.Equal(qualified, agent.GetProperty("model").GetString());
+                Assert.Equal(profile.ReasoningEffort, agent.GetProperty("variant").GetString());
+
+                AssertArgument(setup.OpenCodeArguments, "--model", qualified);
+                AssertArgument(setup.OpenCodeArguments, "--variant", profile.ReasoningEffort);
+            }
+            finally
+            {
+                Directory.Delete(setup.JobRoot, recursive: true);
+            }
+        }
+    }
+
+    private static void AssertArgument(string[] arguments, string name, string expected)
+    {
+        var index = Array.IndexOf(arguments, name);
+        Assert.True(index >= 0 && index + 1 < arguments.Length, $"Missing {name} in {string.Join(' ', arguments)}");
+        Assert.Equal(expected, arguments[index + 1]);
+    }
+
     [Theory]
     [InlineData("explorer")]
     [InlineData("reviewer")]

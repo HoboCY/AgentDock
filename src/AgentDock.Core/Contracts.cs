@@ -16,7 +16,7 @@ public sealed record DockConfiguration
 {
     public int MaxConcurrency { get; init; } = 4;
     public Dictionary<string, RoleConfiguration> Roles { get; init; } = Core.Roles.All.ToDictionary(x => x,
-        x => new RoleConfiguration($"You are the {x} external agent. Complete only the assigned work. Never delegate. Report evidence and remaining limitations."));
+        x => new RoleConfiguration(RolePrompts.For(x)));
     public string EnginePath { get; init; } = "";
     public string SandboxPath { get; init; } = "";
     public string ShellPath { get; init; } = "";
@@ -36,7 +36,11 @@ public sealed record TaskEvent(long Cursor, DateTimeOffset At, string Kind, stri
 public sealed record TaskDetail(TaskSummary Summary, string BodyState, string? Result, TaskEvent[] Events,
     long NextCursor, bool HasMore);
 public sealed record CleanupPreview(int Summaries, int Bodies, int UnfinishedProtected, string? Revision = null);
-public sealed record HostStatus(string Version, int ProcessId, int UnfinishedTasks, bool CanUpdate);
+/// <summary>Provider, model and reasoning effort the engine will use for the next dispatch. Not task history.</summary>
+public sealed record ExecutionProfile(string Provider, string Model, string ReasoningEffort);
+/// <summary>ExecutionProfile stays optional so status payloads from older hosts deserialize without invented metadata.</summary>
+public sealed record HostStatus(string Version, int ProcessId, int UnfinishedTasks, bool CanUpdate,
+    ExecutionProfile? ExecutionProfile = null);
 public sealed record EngineEvent(string Kind, string Text = "", string? UsageId = null,
     long? InputTokens = null, long? OutputTokens = null, double? GenerationSeconds = null);
 public sealed record ExecutionTask(string Id, string Project, string Role, string Prompt,

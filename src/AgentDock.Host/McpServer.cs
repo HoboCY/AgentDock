@@ -91,7 +91,7 @@ public sealed class McpServer(DockClient client)
             new { name, description, inputSchema = new { type = "object", properties = fields, required, additionalProperties = false },
                 annotations = new { readOnlyHint = readOnly, destructiveHint = false, idempotentHint = true, openWorldHint = !readOnly } };
         return [
-            Tool("status", "Get background version, unfinished count and idle-update readiness. Starts the background on demand.", [], []),
+            Tool("status", "Get background version, unfinished count, idle-update readiness and executionProfile (provider, model, reasoningEffort) for the next dispatch. Starts the background on demand.", [], []),
             Tool("start_task", "Accept an external task. Default global concurrency 4; excess queues. Same request_id and parameters reuse the task forever, including after history cleanup. Role/timeouts are captured at acceptance; failed/interrupted tasks NEVER auto-retry. Specify owned files and acceptance criteria in prompt.",
                 new() { ["request_id"] = Field("Unique 8–100 character request identity"), ["cwd"] = Field("Existing absolute project directory; no automatic worktree"),
                     ["title"] = Field("Short task title"), ["role"] = new { type = "string", @enum = Roles.All }, ["prompt"] = Field("Bounded work, explicit file ownership and acceptance criteria") },

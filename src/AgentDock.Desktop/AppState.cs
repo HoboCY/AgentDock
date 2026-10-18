@@ -9,7 +9,7 @@ public sealed class AppState(HostApi api)
 {
     private readonly Dictionary<string, TaskStatus> _lastStatuses = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cancellation = new();
-    private bool _polling;
+    private Task? _pollTask;
     private bool _configLoaded;
     private bool _everConnected;
     private bool _wasReachable;
@@ -39,47 +39,47 @@ public sealed class AppState(HostApi api)
     }
 
     /// <summary>一次轮询不超过一个在途序列；失败后下一轮自动重试连接。</summary>
-    public async Task PollAsync()
+    public Task PollAsync()
     {
-        if (_polling || Token.IsCancellationRequested) return;
-        _polling = true;
+        if (Token.IsCancellationRequested) return Task.CompletedTask;
+        return _pollTask is { IsCompleted: false } running ? running : _pollTask = PollCoreAsync();
+    }
+
+    private async Task PollCoreAsync()
+    {
+        var reachable = false;
         try
         {
-            var reachable = false;
-            try
-            {
-                Host = await Api.StatusAsync(Token);
-                reachable = true;
-                LastError = null;
-            }
-            catch (OperationCanceledException) when (Token.IsCancellationRequested) { return; }
-            catch (Exception ex) { Host = null; LastError = Describe(ex); }
-
-            if (reachable)
-            {
-                try { Tasks = await Api.ListAsync(null, Token); }
-                catch (OperationCanceledException) when (!Token.IsCancellationRequested) { LastError = "任务列表请求超时。"; }
-                catch (Exception ex) when (ex is not OperationCanceledException) { LastError = Describe(ex); }
-
-                if (!_configLoaded)
-                {
-                    try { Configuration = await Api.GetConfigurationAsync(Token); _configLoaded = true; }
-                    catch (Exception) { /* 下一轮继续尝试。 */ }
-                }
-            }
-
-            var reconnected = reachable && _everConnected && !_wasReachable;
-            var disconnected = !reachable && _wasReachable;
-            HostReachable = reachable;
-            _everConnected |= reachable;
-            _wasReachable = reachable;
-            if (reconnected) NotifyRequested?.Invoke("后台已重新连接。", false);
-            if (disconnected) NotifyRequested?.Invoke("后台连接中断，将自动重试。", true);
-
-            if (reachable) DetectTransitions();
-            Changed?.Invoke();
+            Host = await Api.StatusAsync(Token);
+            reachable = true;
+            LastError = null;
         }
-        finally { _polling = false; }
+        catch (OperationCanceledException) when (Token.IsCancellationRequested) { return; }
+        catch (Exception ex) { Host = null; LastError = Describe(ex); }
+
+        if (reachable)
+        {
+            try { Tasks = await Api.ListAsync(null, Token); }
+            catch (OperationCanceledException) when (!Token.IsCancellationRequested) { LastError = "任务列表请求超时。"; }
+            catch (Exception ex) when (ex is not OperationCanceledException) { LastError = Describe(ex); }
+
+            if (!_configLoaded)
+            {
+                try { Configuration = await Api.GetConfigurationAsync(Token); _configLoaded = true; }
+                catch (Exception) { /* 下一轮继续尝试。 */ }
+            }
+        }
+
+        var reconnected = reachable && _everConnected && !_wasReachable;
+        var disconnected = !reachable && _wasReachable;
+        HostReachable = reachable;
+        _everConnected |= reachable;
+        _wasReachable = reachable;
+        if (reconnected) NotifyRequested?.Invoke("后台已重新连接。", false);
+        if (disconnected) NotifyRequested?.Invoke("后台连接中断，将自动重试。", true);
+
+        if (reachable) DetectTransitions();
+        Changed?.Invoke();
     }
 
     /// <summary>显式启动后台（只有用户操作会调用 EnsureHostAsync），随后立即刷新状态。</summary>

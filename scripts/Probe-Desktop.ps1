@@ -3,12 +3,19 @@ param(
     [string]$DesktopPath = "$PSScriptRoot/../src/AgentDock.Desktop/bin/Debug/net10.0/AgentDock.Desktop.exe",
     [string]$Output = "$PSScriptRoot/../artifacts/validation/desktop-live",
     [ValidateRange(3,120)][int]$IdleSampleSeconds = 3,
-    [switch]$SeedTasks
+    [switch]$SeedTasks,
+    [switch]$Onboarding
 )
 $ErrorActionPreference = 'Stop'
 $Output = [IO.Path]::GetFullPath($Output)
 [IO.Directory]::CreateDirectory($Output) | Out-Null
 $dataHome = Join-Path $Output ('data-' + [Guid]::NewGuid().ToString('N'))
+if ($Onboarding) {
+    # Plugin registration fixture only: no model, credentials, or installed-user paths.
+    $fixturePlugin = Join-Path $Output 'plugin'
+    if (Test-Path -LiteralPath $fixturePlugin) { throw 'Use a fresh output directory for onboarding verification.' }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../packaging/plugin') -Destination $fixturePlugin -Recurse -Force
+}
 $originalConfig = Join-Path $env:USERPROFILE '.codex/config.toml'
 $beforeHash = if (Test-Path -LiteralPath $originalConfig) { (Get-FileHash -LiteralPath $originalConfig).Hash } else { $null }
 $pipeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($dataHome.ToUpperInvariant()))).Substring(0,24)
@@ -31,6 +38,8 @@ function Start-App([string]$path, [string[]]$arguments) {
     $info.CreateNoWindow = $true
     $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
     $info.Environment['AGENTDOCK_SMOKE_SAMPLE_SECONDS'] = [string]$IdleSampleSeconds
+    $info.Environment['CODEX_HOME'] = Join-Path $Output 'codex-home'
+    $info.Environment['AGENTDOCK_SMOKE_ONBOARDING'] = $(if ($Onboarding) { '1' } else { '0' })
     foreach ($value in $arguments) { $info.ArgumentList.Add($value) }
     return [Diagnostics.Process]::Start($info)
 }

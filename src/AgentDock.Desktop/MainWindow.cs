@@ -69,6 +69,7 @@ public sealed partial class MainWindow : ShadUI.Window
         NameScope.SetNameScope(this, new NameScope());
         _app = app;
         _state = app.State;
+        InitializeOnboarding();
         Title = "AgentDock";
         Icon = Icons.Create();
         Width = 1280;
@@ -108,6 +109,12 @@ public sealed partial class MainWindow : ShadUI.Window
 
         NameNumericEditor(_concurrency, "全局并发上限");
         Content = BuildLayout();
+        if (!OnboardingProgress.IsComplete(_state.Api.Client.Home)) _pages.SelectedItem = _setupTab;
+        Opened += async (_, _) =>
+        {
+            if (_routingStatus?.Problem is { } problem) ShowNotice("全局委派规则需要检查：" + problem, true);
+            if (_pages.SelectedItem == _setupTab) await RunSetupActionAsync(() => CheckSetupAsync(true));
+        };
         // Apply breakpoints after the current arrange pass. Mutating child grid
         // tracks during SizeChanged can leave their parent with a stale height.
         SizeChanged += (_, _) => Dispatcher.UIThread.Post(UpdateDensity, DispatcherPriority.Loaded);
@@ -151,6 +158,8 @@ public sealed partial class MainWindow : ShadUI.Window
         RefreshHeader();
         RefreshProjects();
         RefreshTasks();
+        UpdateSetupStatus();
+        _credentialState.Text = _state.Configuration?.CredentialConfigured == true ? "凭据：已配置" : "凭据：未配置";
         if (_state.Configuration is { } view && !ReferenceEquals(view, _appliedView))
         {
             _appliedView = view;
@@ -422,8 +431,7 @@ public sealed partial class MainWindow : ShadUI.Window
         {
             var view = await _state.Api.SetCredentialAsync(key, _state.Token);
             _credentialBox.Text = "";
-            _appliedView = view;
-            _state.ApplyConfiguration(view);
+            ApplyCredentialStatus(view);
             ShowNotice("凭据已保存。界面不回显凭据内容。", false);
         }
         catch (Exception ex) { ShowNotice("凭据保存失败：" + AppState.Describe(ex), true); }

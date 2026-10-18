@@ -37,7 +37,8 @@ public sealed partial class MainWindow
     {
         var tasks = new TabItem { Header = "任务", Content = BuildTasksTab() };
         var settings = new TabItem { Header = "设置", Content = BuildSettingsTab() };
-        foreach (var tab in new[] { tasks, settings })
+        _setupTab = new TabItem { Header = "开始使用", Content = BuildOnboarding() };
+        foreach (var tab in new[] { tasks, settings, _setupTab })
         {
             AutomationProperties.SetName(tab, (string)tab.Header!);
             tab.HeaderTemplate = new FuncDataTemplate<string>((label, _) => new StackPanel
@@ -263,6 +264,7 @@ public sealed partial class MainWindow
     {
         var panel = new StackPanel { Spacing = 18, Margin = new Thickness(32, 26, 32, 24), MaxWidth = 1060, HorizontalAlignment = HorizontalAlignment.Stretch };
         panel.Children.Add(new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 8), Children = { Hint("工作空间  /  设置"), Ui.Text("工作台设置", "pageTitle"), Hint("连接你的执行渠道，定义适合自己的工作方式。") } });
+        panel.Children.Add(MakeButton("打开配置引导", OpenSetupAsync));
         panel.Children.Add(SectionCaption("01", "接入与执行", "凭据保存在本机，角色配置只作用于新任务。"));
         _settingsConnections = new UniformGrid { Name = "ConnectionSettings", Columns = 2, Rows = 1 };
         _credentialCard = Section("OpenCode Go", BuildCredentialRow());

@@ -23,6 +23,13 @@ public sealed class OpenCodeEngine(string home, Func<string?> getCredential) : I
     /// <summary>Model this engine is pinned to; no other model is forwarded.</summary>
     public const string Model = Pins.Model;
 
+    /// <summary>
+    /// Provider, model and reasoning effort this engine configures for the next
+    /// dispatch. Reported for dispatch metadata only; it does not describe
+    /// historical tasks.
+    /// </summary>
+    public static ExecutionProfile ExecutionProfile { get; } = new(Pins.Provider, Pins.Model, Pins.ReasoningEffort);
+
     public static void CleanupArtifacts(string home, IEnumerable<string> keepTaskIds) => CheckArtifactsStore.Cleanup(home, keepTaskIds);
 
     /// <summary>Call only while owning the Host launch lock, before admitting any tasks.</summary>

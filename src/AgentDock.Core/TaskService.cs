@@ -28,6 +28,7 @@ public sealed class TaskService : IAsyncDisposable
             state = AtomicJson.Read<ServiceState>(file);
             if (state.Schema != 1) throw new InvalidDataException("不支持的任务存储版本。");
             ValidateConfiguration(state.Configuration);
+            state.Configuration = RolePrompts.UpgradeLegacyDefaults(state.Configuration);
             foreach (var task in state.Tasks.Values)
             {
                 if (task.Status == TaskStatus.Running)

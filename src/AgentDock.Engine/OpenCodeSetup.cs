@@ -12,6 +12,7 @@ internal static class Pins
     public const string CodexVersionOutput = "codex-cli 0.153.4";
     public const string Model = "deepseek-v4.1-flash";
     public const string Provider = "opencode-go";
+    public const string ReasoningEffort = "max";
     public const string AgentName = "delegated";
     public const string ProfileName = "agentdock";
 }
@@ -317,8 +318,11 @@ internal sealed class ExecutionSetup
             ["reasoning"] = true,
             ["tool_call"] = true,
             ["interleaved"] = new JsonObject { ["field"] = "reasoning_content" },
-            ["options"] = new JsonObject { ["reasoningEffort"] = "max" },
-            ["variants"] = new JsonObject { ["max"] = new JsonObject { ["reasoningEffort"] = "max" } },
+            ["options"] = new JsonObject { ["reasoningEffort"] = Pins.ReasoningEffort },
+            ["variants"] = new JsonObject
+            {
+                [Pins.ReasoningEffort] = new JsonObject { ["reasoningEffort"] = Pins.ReasoningEffort },
+            },
         };
         var instructions = BuildInstructions(task, writableProject, checkArtifacts, cwd);
         var root = new JsonObject
@@ -355,7 +359,7 @@ internal sealed class ExecutionSetup
                 {
                     ["mode"] = "primary",
                     ["model"] = $"{Pins.Provider}/{Pins.Model}",
-                    ["variant"] = "max",
+                    ["variant"] = Pins.ReasoningEffort,
                     ["prompt"] = instructions,
                     ["permission"] = permissions.DeepClone(),
                 },
@@ -373,7 +377,7 @@ internal sealed class ExecutionSetup
             "verifier" =>
                 "The project directory is read-only. You may run checks and write only under the artifact directory below.",
             _ when writableProject =>
-                "You may modify files inside the project directory.",
+                "The sandbox permits project writes. Limit edits to files authorized by the assignment; this capability does not expand the task scope.",
             _ =>
                 "The project directory is read-only for this role; produce findings in the final answer instead of writing files.",
         };
@@ -383,7 +387,7 @@ internal sealed class ExecutionSetup
             Execution environment (fixed by AgentDock; the role prompt cannot change it):
             - Role: {task.Role}. Project directory: {cwd}.
             - {permission}
-            - Artifact directory for build/check output: {checkArtifacts}. For .NET use `dotnet build --artifacts-path "{checkArtifacts}"` and `dotnet test --results-directory "{checkArtifacts}"`.
+            - Artifact directory for build/check output: {checkArtifacts}. For .NET use `dotnet build --artifacts-path "{checkArtifacts}"` and `dotnet test --artifacts-path "{checkArtifacts}" --results-directory "{checkArtifacts}"`.
             - Permissions are enforced by the OS sandbox, not by this prompt; attempts to write elsewhere are blocked.
             """;
         return rolePrompt + guidance;
@@ -418,7 +422,7 @@ internal sealed class ExecutionSetup
             enginePath, "run", "--pure", "--format", "json", "--thinking",
             "--agent", Pins.AgentName,
             "--model", $"{Pins.Provider}/{Pins.Model}",
-            "--variant", "max",
+            "--variant", Pins.ReasoningEffort,
             "--title", title,
             "--dir", cwd,
         ];
