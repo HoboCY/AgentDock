@@ -190,19 +190,30 @@ public sealed partial class MainWindow
                 break;
             case 2:
                 _setupBody.Children.Add(Ui.Text("让 Codex 找到 AgentDock", "sectionTitle"));
-                _setupBody.Children.Add(Hint("点击下方按钮注册并启用本机插件。接入完成后，请重启 Codex，再新建对话。"));
+                _setupBody.Children.Add(Hint("点击下方按钮注册并启用本机插件。完成后，重启 ChatGPT / Codex 桌面 App，再新建对话验证 AgentDock 工具。"));
+                _setupBody.Children.Add(Hint("此步骤通过 Codex 命令工具配置插件；日常仍在桌面 App 中使用。"));
                 _setupBody.Children.Add(Hint(_codexStatus?.Message ?? (_codex.Executable is null ? "未找到 Codex，可选择已安装的程序文件。" : "已找到 Codex，点击接入或重新检查。")));
-                _setupBody.Children.Add(Hint("Codex：" + (_codex.Executable ?? "未找到")));
-                var choose = Ui.Button("选择 Codex 程序…");
+                _setupBody.Children.Add(Hint("插件配置工具：" + (_codex.Executable ?? "未找到")));
+                var choose = Ui.Button(OperatingSystem.IsMacOS() ? "选择应用或 Codex 命令文件…" : "选择 Codex 程序…");
                 choose.IsEnabled = !_setupBusy;
                 choose.Click += async (_, _) => await RunSetupActionAsync(async () =>
                 {
-                    var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "选择 Codex 程序", AllowMultiple = false });
+                    var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                    {
+                        Title = OperatingSystem.IsMacOS() ? "选择 ChatGPT.app、Codex.app 或 codex 命令文件" : "选择 Codex 程序",
+                        AllowMultiple = false,
+                        FileTypeFilter = OperatingSystem.IsMacOS()
+                            ? [new FilePickerFileType("ChatGPT / Codex 应用或命令文件")
+                                { AppleUniformTypeIdentifiers = ["com.apple.application-bundle", "public.unix-executable", "public.script"] }, FilePickerFileTypes.All]
+                            : null,
+                    });
                     if (files.Count == 0) return;
                     _codex.Executable = files[0].TryGetLocalPath();
                     _codexStatus = await _codex.InspectAsync(_state.Token);
                 });
                 _setupBody.Children.Add(choose);
+                if (OperatingSystem.IsMacOS())
+                    _setupBody.Children.Add(Hint("应用包含 Codex 命令工具时可直接选择 ChatGPT.app 或 Codex.app；也可选择已安装的 codex 命令文件。"));
                 _setupBody.Children.Add(Hint("Codex 配置目录：" + _codex.CodexHome));
                 break;
             case 3:

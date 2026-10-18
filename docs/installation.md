@@ -35,7 +35,9 @@
 
 4. 首次启动进入「开始使用」，依次完成：启动后台 → 保存 OpenCode Go API Key → 接入 Codex → 启用全局委派。可点击「稍后配置」进入任务页；未完成时下次启动继续显示引导，完成后默认进入任务页。可随时从「开始使用」或「设置 → 打开配置引导」重新进入。
 5. 凭据已存在时可直接继续，输入新值才会替换。保存后立即刷新状态并清空输入；“已保存”仅确认本机存储，不代表 API Key 有效或未过期。是否可执行以真实任务结果为准。**AgentDock 全新配置，不迁移旧凭据或角色**；系统登录自启默认关闭。
-6. 引导可自动查找 Codex 桌面版自带程序，即使终端没有 `codex` 命令也能接入；找不到时可选择已安装的 Codex 程序。插件状态显示“已注册并启用”，并不代表当前 Codex 对话已经载入工具。配置后重启 Codex 并新建对话。
+6. 引导通过 Codex 命令工具注册本机插件，配置完成后仍可日常使用 ChatGPT / Codex 桌面 App。macOS 会查找 PATH、系统及用户“应用程序”目录中的 `ChatGPT.app`、`Codex.app`、用户本地 CLI 和 Homebrew 安装位置；这些位置没有命令工具时，还会查找 `NVM_DIR`（默认 `~/.nvm`）下 `versions/node/v*/bin/codex`，优先使用包含 Codex 的最新 Node 版本。手动选择 `.app` 仅在其中包含命令工具时有效，也可直接选择现有的 `codex` 文件。启动 nvm 命令工具时，AgentDock 为该子进程补充同目录 Node 的查找路径，不修改系统或终端配置。
+
+   CLI 与桌面 App 需要使用同一份 Codex 配置目录。插件状态显示“已注册并启用”，并不代表桌面 App 当前对话已经载入工具；配置后重启桌面 App 并新建对话，在 App 中验证 AgentDock 工具。官方说明见 [本地插件与桌面 App](https://developers.openai.com/plugins/build/plugins#how-local-marketplaces-work)。
 
 全局委派首次仅在点击「启用全局委派并完成」时启用：优先使用 `CODEX_HOME`（默认 `~/.codex`）中非空的 `AGENTS.override.md`，否则使用 `AGENTS.md`，不会新建覆盖文件。受控区块之外的内容保留；可从引导最后一步「关闭全局委派并恢复原规则」。恢复记录保存在 AgentDock 数据目录 `onboarding-routing-backup.json`，引导完成记录在 `onboarding.json`。
 

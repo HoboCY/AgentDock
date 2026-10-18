@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>WinExe</OutputType></PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="AgentDock.Tests" />
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
     <!-- ShadUI 0.1.6 targets Avalonia 11; 0.2.x requires Avalonia 12. -->
