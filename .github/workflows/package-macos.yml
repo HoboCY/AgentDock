@@ -57,12 +57,7 @@ jobs:
           python3 scripts/Fetch-MacRuntimes.py "$RUNNER_TEMP/mac-runtimes"
           bash scripts/Build-MacGit.sh "$RUNNER_TEMP/mac-git"
           python3 scripts/Prepare-MacGit.py "$RUNNER_TEMP/mac-git"
-      - name: 原生回归
-        env:
-          AGENTDOCK_TEST_SANDBOX: ${{ runner.temp }}/mac-runtimes/codex/bin/codex
-          AGENTDOCK_TEST_OPENCODE: ${{ runner.temp }}/mac-runtimes/opencode/bin/opencode
-          AGENTDOCK_MAC_EXECUTION_TESTS: '1'
-          AGENTDOCK_KEYCHAIN_TESTS: '1'
+      - name: 配置隔离测试环境
         run: |
           # Hosted runner 仅使用临时钥匙串保存合成测试凭据。
           test_keychain="$RUNNER_TEMP/agentdock-tests.keychain-db"
@@ -73,13 +68,31 @@ jobs:
           security unlock-keychain -p "$test_password" "$test_keychain"
           security list-keychains -d user -s "$test_keychain"
           security default-keychain -d user -s "$test_keychain"
-          dotnet test tests/AgentDock.Tests/AgentDock.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
-          dotnet test tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
+          # 源码测试的 apphost 依赖 setup-dotnet；launchd 不继承 shell 的 SDK 路径。
+          launchctl setenv DOTNET_ROOT "$DOTNET_ROOT"
+          launchctl setenv DOTNET_ROOT_ARM64 "$DOTNET_ROOT"
+      - name: 原生 Host 回归
+        timeout-minutes: 5
+        env:
+          AGENTDOCK_TEST_SANDBOX: ${{ runner.temp }}/mac-runtimes/codex/bin/codex
+        run: dotnet test tests/AgentDock.Tests/AgentDock.Tests.csproj -c Release -m:1 --disable-build-servers --blame-hang-timeout 120s --blame-hang-dump-type none --logger trx --results-directory artifacts/mac-tests/host
+      - name: 原生执行器回归
+        timeout-minutes: 10
+        env:
+          AGENTDOCK_TEST_SANDBOX: ${{ runner.temp }}/mac-runtimes/codex/bin/codex
+          AGENTDOCK_TEST_OPENCODE: ${{ runner.temp }}/mac-runtimes/opencode/bin/opencode
+          AGENTDOCK_MAC_EXECUTION_TESTS: '1'
+          AGENTDOCK_KEYCHAIN_TESTS: '1'
+        run: |
+          dotnet test tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj -c Release -m:1 --disable-build-servers --filter FullyQualifiedName~JobRelaysStdioAndReturnsOnlyAfterItsCoalitionStops --blame-hang-timeout 120s --blame-hang-dump-type none --logger trx --results-directory artifacts/mac-tests/startup
+          dotnet test tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj -c Release --no-build --no-restore --blame-hang-timeout 120s --blame-hang-dump-type none --logger trx --results-directory artifacts/mac-tests/engine
       - name: 清理合成测试凭据
         if: always()
         run: |
           test_keychain="$RUNNER_TEMP/agentdock-tests.keychain-db"
           if [[ -f "$test_keychain" ]]; then security delete-keychain "$test_keychain"; fi
+          launchctl unsetenv DOTNET_ROOT
+          launchctl unsetenv DOTNET_ROOT_ARM64
       - name: 构建完整 APP 与 DMG
         run: |
           python3 scripts/Build-MacPackage.py --version "$VERSION" --output-dir "$GITHUB_WORKSPACE/artifacts/mac-package" \
@@ -105,7 +118,8 @@ jobs:
         with:
           name: macos-validation-${{ github.run_number }}
           path: |
-            artifacts/mac-tests/*.trx
+            artifacts/mac-tests/**/*.trx
+            artifacts/mac-tests/**/*.xml
             ${{ runner.temp }}/mac-setup-gates/results.json
             ${{ runner.temp }}/mac-git/build.log
           if-no-files-found: warn

@@ -46,7 +46,7 @@ public sealed class MacExecutionTests : IDisposable
         job.Stdin.Write(Encoding.UTF8.GetBytes("PROMPT_OK"));
         job.Stdin.Dispose();
         Assert.True(job.WaitForExit(45_000));
-        Assert.Equal(0, job.ExitCode);
+        Assert.True(job.ExitCode == 0, stderr.GetAwaiter().GetResult());
         Assert.Contains("PROMPT_OK", stdout.GetAwaiter().GetResult());
         Assert.Contains("ERR_OK", stderr.GetAwaiter().GetResult());
     }
