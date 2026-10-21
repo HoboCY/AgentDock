@@ -13,7 +13,13 @@
    ```
 
 3. 标签推送会自动构建并创建 **Draft + Pre-release**。核对附件与说明后，在 GitHub Releases 编辑该草稿，保持 Pre-release 并发布。
-4. 如需由 Action 直接公开发布，在 Actions → package → Run workflow 中选择已有测试标签，勾选 `release`、关闭 `draft`。`version` 留空，或填写标签去掉 `v` 后的版本。已有 Release 时创建操作会失败，不覆盖附件；若已生成草稿，直接发布该草稿。
+4. 如标签尚无 Release，且需要由 Action 直接公开发布，使用 GitHub CLI 的 `--ref` 指定已有测试标签（网页 Run workflow 的选择器主要用于分支）：
+
+   ```powershell
+   gh workflow run package.yml --repo HoboCY/AgentDock --ref v0.1.1-beta.1 -f release=true -f draft=false
+   ```
+
+   `version` 留空，或填写标签去掉 `v` 后的版本。已有 Release 时创建操作会失败，不覆盖附件；标签推送通常已生成草稿，此时直接发布该草稿。标签选择语义见 [gh workflow run 文档](https://cli.github.com/manual/gh_workflow_run)。
 
 普通 main/PR 构建和未勾选 `release` 的手动运行只保留 Actions artifacts。创建 Release 的 job 单独获得 `contents: write`，无需添加 PAT、模型凭据或签名密钥。使用 `--verify-tag` 防止自动从默认分支创建标签；预发布不标为 Latest。参数语义见 [GitHub CLI 文档](https://cli.github.com/manual/gh_release_create)。
 
