@@ -17,7 +17,7 @@
   - 每个运行时输入目录与 payload 都不允许符号链接；可执行文件权限位写入 payload-manifest.json（mode），
     由 MacSetup 在解包/复制时应用并校验。
   - 自包含发布固定 RuntimeFrameworkVersion=<lock.dotnet.runtime>；SDK 必须以 <lock.dotnet.sdk> 开头。
-  - 未签名、未公证、未在真实 Mac 完成验收前 releaseReady 恒为 false，产物只能作为本地/CI 候选。
+  - 未签名、未公证、未在真实 Mac 完成验收前 releaseReady 恒为 false；可生成明确披露限制的预发布，不能作为稳定版。
 
 用法示例：
   python3 scripts/Build-MacPackage.py --version 0.1.0 \\
@@ -525,7 +525,6 @@ def main(argv: list[str]) -> int:
             "developer-id-signature-missing：未以 Developer ID 签署发行包（内部二进制可能含工具链 ad-hoc 签名）",
             "notarization-missing：未做 Apple notarization/stapling",
             "macos-acceptance-evidence-not-attached：构建不会自动附带实机验收记录；发布前须核对对应构件的外部验收证据",
-            "release-not-authorized：公开发布未授权，产物只能作为本地/CI 候选",
         ]
         if dotnet["sdk"] != dotnet["expectedSdk"]:
             release_blocked.append(f"dotnet-sdk-mismatch：{dotnet['sdk']} != {dotnet['expectedSdk']}")

@@ -72,15 +72,16 @@ function Invoke-PackageCase([string]$Name, [scriptblock]$Mutate, [bool]$Reject) 
         if ($failure) { throw $failure }
         $names = @(Get-ChildItem -LiteralPath $output -File | Select-Object -ExpandProperty Name)
         if ($names.Count -ne 4 -or $names -contains 'private-fixture.txt' -or $names -contains "AgentDock-$version-win-x64.zip") { throw '发布附件范围不正确。' }
-        $sums = Get-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt')
+        $sums = Get-Content -LiteralPath (Join-Path $output 'SHA256SUMS-win-x64.txt')
         if ($sums.Count -ne 2) { throw '校验清单缺少附件。' }
         foreach ($line in $sums) {
             $hash, $file = $line -split '  ', 2
             if ((Get-FileHash -LiteralPath (Join-Path $output $file)).Hash.ToLowerInvariant() -cne $hash) { throw '校验清单不正确。' }
         }
-        if ([IO.File]::ReadAllText((Join-Path $output 'SHA256SUMS.txt')).Contains("`r")) { throw '校验清单必须使用 LF。' }
-        if ((Get-Content -Raw -LiteralPath (Join-Path $output 'release-notes.md')) -notmatch 'releaseReady=false') { throw '发行限制丢失。' }
-        $publishedManifest = Get-Content -Raw -LiteralPath (Join-Path $output 'package-manifest.json') | ConvertFrom-Json
+        if ([IO.File]::ReadAllText((Join-Path $output 'SHA256SUMS-win-x64.txt')).Contains("`r")) { throw '校验清单必须使用 LF。' }
+        if ((Get-Content -Raw -LiteralPath (Join-Path $output 'release-notes-win-x64.md')) -notmatch 'releaseReady=false') { throw '发行限制丢失。' }
+        if ((Get-FileHash -LiteralPath (Join-Path $output 'package-manifest-win-x64.json')).Hash -cne (Get-FileHash -LiteralPath (Join-Path $package 'package-manifest.json')).Hash) { throw '发布清单原始字节被改写。' }
+        $publishedManifest = Get-Content -Raw -LiteralPath (Join-Path $output 'package-manifest-win-x64.json') | ConvertFrom-Json
         if ($publishedManifest.warnings -notcontains 'unsigned' -or $publishedManifest.releaseBlocked -contains 'unsigned') { throw '发布清单必须保留未签名警告，不能将其改为 Windows 阻塞项。' }
         $retryFailed = $false
         try { & "$PSScriptRoot/Prepare-Release.ps1" -Version $version -PackageDir $package -OutputDir $output }
@@ -122,6 +123,7 @@ try {
     foreach ($case in @(
         @{ Name = 'branch-ci'; Release = 'false'; Type = 'branch'; Ref = 'main'; Input = ''; Version = '0.0.0-ci.1'; Expected = '0.0.0-ci.1'; Reject = $false },
         @{ Name = 'tag-release'; Release = 'true'; Type = 'tag'; Ref = 'v0.1.1-beta.1'; Input = ''; Version = '0.0.0-ci.1'; Expected = '0.1.1-beta.1'; Reject = $false },
+        @{ Name = 'tag-build-only'; Release = 'false'; Type = 'tag'; Ref = 'v0.1.1-beta.1'; Input = ''; Version = '0.0.0-ci.1'; Expected = '0.1.1-beta.1'; Reject = $false },
         @{ Name = 'branch-release'; Release = 'true'; Type = 'branch'; Ref = 'main'; Input = ''; Version = '0.0.0-ci.1'; Reject = $true },
         @{ Name = 'stable-tag'; Release = 'true'; Type = 'tag'; Ref = 'v0.1.1'; Input = ''; Version = '0.0.0-ci.1'; Reject = $true },
         @{ Name = 'mismatched-input'; Release = 'true'; Type = 'tag'; Ref = 'v0.1.1-beta.1'; Input = '0.1.2-beta.1'; Version = '0.0.0-ci.1'; Reject = $true },

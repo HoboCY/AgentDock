@@ -15,7 +15,7 @@
 
 - `AgentDockSetup-<版本>-win-x64.exe`：内置桌面程序、后台 Host、执行引擎、固定运行时与插件源的完整安装程序。
 
-无需另行下载、解压或复制 payload，也不需要处理 `package-manifest.json` 或 `SHA256SUMS.txt`；它们是可选的构建与校验资料。旧版 `0.1.1-beta.1` 仍是 EXE + ZIP 分体包，需要按该版本的 Release 说明下载两个文件。
+无需另行下载、解压或复制 payload，也不需要处理 JSON 清单或 `SHA256SUMS.txt`；它们是可选的构建与校验资料。双平台 Release 的 Windows 清单名为 `package-manifest-win-x64.json`，beta.2 仍保留原名 `package-manifest.json`。旧版 `0.1.1-beta.1` 仍是 EXE + ZIP 分体包，需要按该版本的 Release 说明下载两个文件。
 
 ## 二、安装
 

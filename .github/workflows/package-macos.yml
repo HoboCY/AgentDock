@@ -1,8 +1,11 @@
 name: package-macos
 
 on:
-  push:
-    tags: ['v*']
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -53,6 +56,7 @@ jobs:
           dotnet-version: ${{ steps.version.outputs.sdk }}
       - name: 获取并校验固定运行时
         run: |
+          python3 scripts/Test-MacRelease.py
           python3 scripts/Test-MacRuntimeFetch.py
           python3 scripts/Fetch-MacRuntimes.py "$RUNNER_TEMP/mac-runtimes"
           bash scripts/Build-MacGit.sh "$RUNNER_TEMP/mac-git"
@@ -104,13 +108,12 @@ jobs:
           python3 scripts/Test-MacSetupGates.py \
             --setup "$GITHUB_WORKSPACE/artifacts/mac-package/AgentDockSetup-$VERSION-macos-arm64.app/Contents/MacOS/AgentDock" \
             --work "$RUNNER_TEMP/mac-setup-gates"
+      - name: 校验并整理 Mac Release 附件
+        run: python3 scripts/Prepare-MacRelease.py --version "$VERSION" --package-dir artifacts/mac-package --output-dir artifacts/mac-release
       - uses: actions/upload-artifact@v4
         with:
-          name: agentdock-macos-arm64-UNSIGNED-${{ github.run_number }}
-          path: |
-            artifacts/mac-package/*.dmg
-            artifacts/mac-package/*.json
-            artifacts/mac-package/*.txt
+          name: agentdock-release-macos-arm64-${{ github.run_id }}
+          path: artifacts/mac-release/*
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@v4

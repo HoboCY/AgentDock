@@ -3,8 +3,8 @@ name: package
 # 打包与自检工作流：
 # - windows-package：测试源码并生成完整 win-x64 安装包。
 # - plugin-probe-selftest：手动触发，验证 Codex 插件接入探针链路（需要 runner 上有 Codex CLI）。
-# - macos-recipe：手动触发的 macOS 配方，产物明确标记未签名/未验证，不作为正式发布。
-# v* 测试标签在门禁通过后创建 Windows 预发布，默认保留为草稿。
+# - macos-package：调用原生 Mac 构建与安装门禁，输出完整 arm64 DMG。
+# v* 测试标签必须在两平台门禁通过后创建同一个预发布，默认保留为草稿。
 
 on:
   push:
@@ -20,6 +20,7 @@ on:
       - 'packaging/**'
       - 'scripts/**'
       - '.github/workflows/package.yml'
+      - '.github/workflows/package-macos.yml'
   pull_request:
     paths:
       - 'src/**'
@@ -31,6 +32,7 @@ on:
       - 'packaging/**'
       - 'scripts/**'
       - '.github/workflows/package.yml'
+      - '.github/workflows/package-macos.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -43,7 +45,7 @@ on:
         default: false
         type: boolean
       release:
-        description: '创建 Windows 预发布（必须选择已有 v* 测试标签运行）'
+        description: '创建 Windows + macOS 预发布（必须选择已有 v* 测试标签运行）'
         required: false
         default: false
         type: boolean
@@ -64,9 +66,9 @@ env:
   VERSION: ${{ inputs.version != '' && inputs.version || format('0.0.0-ci.{0}', github.run_number) }}
 
 jobs:
-  windows-package:
-    name: Windows 安装包（win-x64）
-    runs-on: windows-latest
+  version:
+    name: 确定共同版本
+    runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.version.outputs.release }}
       version: ${{ steps.version.outputs.version }}
@@ -80,17 +82,30 @@ jobs:
           CREATE_RELEASE: ${{ github.event_name == 'push' && github.ref_type == 'tag' || inputs.release }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if ($env:CREATE_RELEASE -eq 'true') {
-            if ($env:GITHUB_REF_TYPE -ne 'tag' -or $env:GITHUB_REF_NAME -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*\z') {
+          if ($env:CREATE_RELEASE -eq 'true' -and $env:GITHUB_REF_TYPE -ne 'tag') { throw '发布必须选择已有测试标签。' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*\z') {
               throw '当前只支持测试标签（例如 v0.1.1-beta.1），不发布稳定版或分支快照。'
             }
             $env:VERSION = $env:GITHUB_REF_NAME.Substring(1)
             if ($env:INPUT_VERSION -and $env:INPUT_VERSION -cne $env:VERSION) { throw '输入版本必须与标签一致。' }
           }
-          if ($env:VERSION -cnotmatch '^[0-9A-Za-z][0-9A-Za-z._-]*\z') { throw '版本号包含非法字符。' }
+          if ($env:VERSION -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*\z') { throw '当前只支持带测试后缀的版本。' }
           "VERSION=$env:VERSION" >> $env:GITHUB_ENV
           "version=$env:VERSION" >> $env:GITHUB_OUTPUT
           "release=$env:CREATE_RELEASE" >> $env:GITHUB_OUTPUT
+
+      - name: 发布流程失败保护回归
+        run: python3 scripts/Test-ReleaseWorkflow.py
+
+  windows-package:
+    name: Windows 安装包（win-x64）
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
 
       - name: 发布门禁回归
         shell: pwsh
@@ -157,45 +172,69 @@ jobs:
           & ./scripts/Test-SetupGates.ps1 @gateArgs
 
       - name: 校验并整理 Release 附件
-        if: steps.version.outputs.release == 'true'
         shell: pwsh
         run: ./scripts/Prepare-Release.ps1 -Version "$env:VERSION" -PackageDir "artifacts/package/$env:VERSION/win-x64" -OutputDir artifacts/release
 
       - uses: actions/upload-artifact@v4
-        if: steps.version.outputs.release == 'true'
         with:
-          name: agentdock-release-${{ github.run_id }}
+          name: agentdock-release-win-x64-${{ github.run_id }}
           path: artifacts/release/*
           if-no-files-found: error
           retention-days: 14
 
-      - uses: actions/upload-artifact@v4
-        if: steps.version.outputs.release != 'true'
-        with:
-          name: agentdock-win-x64-${{ github.run_number }}
-          path: artifacts/package/**
-          if-no-files-found: error
-          retention-days: 14
+  macos-package:
+    name: macOS 安装包（Apple Silicon）
+    needs: version
+    if: needs.version.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/package-macos.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   release:
-    name: Windows 预发布
-    needs: windows-package
-    if: needs.windows-package.outputs.release == 'true'
+    name: 汇总双平台安装包
+    needs: [version, windows-package, macos-package]
+    if: needs.version.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: agentdock-release-${{ github.run_id }}
+          name: agentdock-release-win-x64-${{ github.run_id }}
           path: release
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: agentdock-release-macos-arm64-${{ github.run_id }}
+          path: release
+
+      - name: 核对双平台附件并合并说明
+        working-directory: release
+        run: |
+          sha256sum --check SHA256SUMS-win-x64.txt
+          sha256sum --check SHA256SUMS-macos-arm64.txt
+          cat SHA256SUMS-win-x64.txt SHA256SUMS-macos-arm64.txt > SHA256SUMS.txt
+          cat release-notes-win-x64.md release-notes-macos-arm64.md > release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentdock-release-bundle-${{ github.run_id }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/package-manifest-*.json
+            release/SHA256SUMS.txt
+            release/release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
       - name: 创建 GitHub Release
+        if: needs.version.outputs.release == 'true'
         working-directory: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_VERSION: ${{ needs.windows-package.outputs.version }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
           RELEASE_DRAFT: ${{ github.event_name != 'workflow_dispatch' || inputs.draft }}
         run: |
           sha256sum --check SHA256SUMS.txt
@@ -204,14 +243,17 @@ jobs:
             echo 'Release tag moved after this build started.' >&2
             exit 1
           fi
-          flags=()
-          if [[ "$RELEASE_DRAFT" == "true" ]]; then flags+=(--draft); fi
           gh release create "v$RELEASE_VERSION" \
             "AgentDockSetup-$RELEASE_VERSION-win-x64.exe" \
-            package-manifest.json SHA256SUMS.txt \
-            --verify-tag --prerelease --latest=false "${flags[@]}" \
-            --title "AgentDock $RELEASE_VERSION (Windows preview)" \
+            "AgentDockSetup-$RELEASE_VERSION-macos-arm64.dmg" \
+            package-manifest-win-x64.json package-manifest-macos-arm64.json SHA256SUMS.txt \
+            --verify-tag --prerelease --latest=false --draft \
+            --title "AgentDock $RELEASE_VERSION (Windows + macOS preview)" \
             --notes-file release-notes.md
+          # 附件上传全部成功后才允许公开，上传失败保留草稿。
+          if [[ "$RELEASE_DRAFT" != "true" ]]; then
+            gh release edit "v$RELEASE_VERSION" --draft=false --prerelease --latest=false
+          fi
 
   plugin-probe-selftest:
     name: 插件探针自检
@@ -243,29 +285,3 @@ jobs:
           path: probe-result.json
           if-no-files-found: warn
           retention-days: 7
-
-  macos-recipe:
-    name: macOS 配方（未签名 / 未验证，禁止作为正式发布）
-    if: github.event_name == 'workflow_dispatch' && !inputs.release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: 交叉发布 osx-arm64 配方
-        shell: pwsh
-        run: ./scripts/Build-Package.ps1 -Version "$env:VERSION-unsig" -Runtime osx-arm64 -AllowPartial -PayloadFormat zip
-
-      - name: 明确标注未验证
-        shell: pwsh
-        run: Write-Host '::warning::macOS 配方未签名、未经真实设备验收，仅用于准备发布流程，不得作为正式支持发布。'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm64-UNSIGNED-UNVALIDATED-${{ github.run_number }}
-          path: artifacts/package/**
-          if-no-files-found: error
-          retention-days: 14

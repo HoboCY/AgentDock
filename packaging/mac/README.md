@@ -4,7 +4,9 @@
 
 构建在 Mac 上需要固定 SDK、Python 3 与 CLT；终端用户运行自包含安装包不需要这些开发工具。构建脚本不下载 OpenCode/Codex，输入必须为锁文件指定的官方 npm 归档及其原样展开目录。构建时核对归档 SHA-512、版本及每个展开文件，拒绝额外文件和符号链接。
 
-GitHub 的 `package-macos` 工作流使用原生 ARM64 runner，按锁文件准备 SDK 和运行时、构建 Git，并执行原生回归和安装门禁。输出未签名 DMG 及清单到 Actions artifact，不自动声明正式支持。`scripts/Fetch-MacRuntimes.py <全新目录>` 负责下载并在展开前校验固定归档；目录下 `opencode/`、`codex/` 可直接作为下方构建器的对应 root。
+GitHub 的 `package-macos` 工作流使用原生 ARM64 runner，按锁文件准备 SDK 和运行时、构建 Git，并执行原生回归和安装门禁。统一的 `package` 发版工作流调用它，将 DMG 与 Windows EXE 放进同一个 Release 草稿；任一平台失败都不创建 Release。Mac 工作流仍可独立手动运行，只输出 Actions artifact。完整操作见 [发布说明](../../docs/releasing.md)。`scripts/Fetch-MacRuntimes.py <全新目录>` 负责下载并在展开前校验固定归档；目录下 `opencode/`、`codex/` 可直接作为下方构建器的对应 root。
+
+下载时选择 `AgentDockSetup-<版本>-macos-arm64.dmg`（Apple Silicon；不含 Intel 构建），其中安装器已内置完整程序包，普通用户无需另下 payload ZIP 或 JSON 清单。当前 Mac 包未签名/公证，真实下载后可能受 Gatekeeper 拦截；预发布附件可下载不代表已完成该安装路径或稳定发行验收。
 
 ```sh
 # Git 构建：新目录，保留官方源码归档与完整性记录。
