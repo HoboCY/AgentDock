@@ -15,6 +15,21 @@
 
 签名不保证新版本立刻获得 SmartScreen 信誉，必须保留真实下载后的验收。参考[微软签名说明](https://learn.microsoft.com/en-us/windows/msix/package/sign-msix-package-guide)。
 
+### 中国大陆个人开发者的准备路径
+
+优先评估 SignPath Foundation 的开源项目申请，不先购买证书。它使用基金会名下的发行者身份，不是给个人签发证书；需要审核项目的可信记录，新项目不能保证获批，每次发行签名仍需指定成员批准。
+
+申请前准备：
+
+- 启用 GitHub 双重验证，确定维护者和签名批准人；申请账户、联系人和身份信息由本人填写。
+- 提供仓库 `https://github.com/HoboCY/AgentDock`、MIT 许可证、已有 Windows Release 和对应 Actions 构建链接。
+- 核对全部随包组件及许可证，说明 .NET、OpenCode、Codex、Git 等上游程序只是随包分发，不用项目证书给第三方二进制重签。
+- 准备真实的隐私说明：AgentDock 按用户任务调用 OpenCode Go 服务，可能发送任务所需的代码和文档；不能声称软件从不联网或从不传输数据。签名政策还需列出维护/审核/批准角色；批准前不要写“已由 SignPath 提供签名”。
+
+官方[申请入口](https://signpath.org/apply)及[项目条件](https://signpath.org/terms)。如果不获批，再评估支持中国大陆个人身份的付费服务，购买前由服务商确认身份材料、GitHub Actions 接入方式、交互审批要求及总费用。
+
+[Certum 的开源云签名](https://shop.certum.eu/open-source-code-signing-on-simplysign.html)属于可询问的备选；2026-10-21 页面显示缺货，并要求移动应用和桌面连接程序。尚未确认中国大陆身份材料和无人值守 Actions 是否满足，不能把“云签名”直接理解为全自动 CI 签名。
+
 ## macOS
 
 1. 使用自己的 Apple Account 加入 Apple Developer Program，并完成身份验证。
