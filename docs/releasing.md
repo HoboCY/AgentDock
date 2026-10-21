@@ -42,6 +42,8 @@ gh workflow run package.yml --repo HoboCY/AgentDock --ref main -f version=0.1.1-
 
 发布逻辑本地回归：`pwsh -NoProfile -File scripts/Test-ReleasePackage.ps1`、`python scripts/Test-MacRelease.py` 和 `python scripts/Test-ReleaseWorkflow.py`（需 Bash）。使用合成小文件验证附件门禁、实际版本脚本以及模拟上传失败/标签移动时拒绝公开，不替代真实安装包测试。
 
+2026-10-21 的 [双平台云端演练](validation/dual-platform-release-20261021.md) 已通过，验证两个安装包、原生安装门禁和统一附件汇总；本次演练没有公开新版本。
+
 ## 当前发行边界
 
 当前生成双平台预发布。Windows 未签名可能有 SmartScreen 提示；Mac 未经 Developer ID 签名、公证，真实下载后可能被 Gatekeeper 拦截，下载运行路径尚未验收。此前 Windows 干净系统、Mac 本地候选及真实任务的验收证据见 [验收矩阵](validation/acceptance.md)，这些结果属于各自的版本，不能自动继承为新标签的验收。
