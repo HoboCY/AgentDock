@@ -62,9 +62,24 @@ jobs:
           AGENTDOCK_TEST_SANDBOX: ${{ runner.temp }}/mac-runtimes/codex/bin/codex
           AGENTDOCK_TEST_OPENCODE: ${{ runner.temp }}/mac-runtimes/opencode/bin/opencode
           AGENTDOCK_MAC_EXECUTION_TESTS: '1'
+          AGENTDOCK_KEYCHAIN_TESTS: '1'
         run: |
+          # Hosted runner 仅使用临时钥匙串保存合成测试凭据。
+          test_keychain="$RUNNER_TEMP/agentdock-tests.keychain-db"
+          test_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$test_password"
+          security create-keychain -p "$test_password" "$test_keychain"
+          security set-keychain-settings -lut 3600 "$test_keychain"
+          security unlock-keychain -p "$test_password" "$test_keychain"
+          security list-keychains -d user -s "$test_keychain"
+          security default-keychain -d user -s "$test_keychain"
           dotnet test tests/AgentDock.Tests/AgentDock.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
           dotnet test tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
+      - name: 清理合成测试凭据
+        if: always()
+        run: |
+          test_keychain="$RUNNER_TEMP/agentdock-tests.keychain-db"
+          if [[ -f "$test_keychain" ]]; then security delete-keychain "$test_keychain"; fi
       - name: 构建完整 APP 与 DMG
         run: |
           python3 scripts/Build-MacPackage.py --version "$VERSION" --output-dir "$GITHUB_WORKSPACE/artifacts/mac-package" \

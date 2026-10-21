@@ -205,7 +205,22 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             // Only this fixture's unique temporary data home can be removed.
             var identity = AgentDock.Engine.MacKeychain.Identity(root);
             Assert.StartsWith(ProjectPaths.Canonicalize(Path.GetTempPath()) + Path.DirectorySeparatorChar, identity.Account);
-            AgentDock.Engine.MacKeychain.Delete(identity);
+            if (AgentDock.Engine.MacKeychain.Exists(root))
+            {
+                // Host 与测试进程的代码身份不同，用系统工具清理本夹具创建的项目。
+                var start = new ProcessStartInfo("/usr/bin/security")
+                { UseShellExecute = false, RedirectStandardError = true, CreateNoWindow = true };
+                foreach (var argument in new[] { "delete-generic-password", "-s", identity.Service, "-a", identity.Account })
+                    start.ArgumentList.Add(argument);
+                using var cleanup = Process.Start(start)!;
+                try
+                {
+                    await cleanup.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                    Assert.True(cleanup.ExitCode == 0, await cleanup.StandardError.ReadToEndAsync());
+                    Assert.False(AgentDock.Engine.MacKeychain.Exists(root));
+                }
+                finally { if (!cleanup.HasExited) { cleanup.Kill(true); await cleanup.WaitForExitAsync(); } }
+            }
         }
         if (Directory.Exists(root)) Directory.Delete(root, true);
     }

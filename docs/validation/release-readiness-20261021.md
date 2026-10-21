@@ -22,7 +22,7 @@
 
 ## 原生 Mac 结果
 
-环境为现有 Apple Silicon Mac、macOS 26.6.2、SDK 10.0.401。隔离目录 `/Users/hobo/Projects/AgentDock-release-20261021`，未替换日常安装。源码归档 SHA-256：`eb1e4b4fd172fa58c5a5227f05c24ae9ca9fa8e0bac858d312984ce0992caa44`；复制后逐文件核对。归档之后仅继续修改 CI 配置及文档，GitHub 精确提交构建另记。
+环境为现有 Apple Silicon Mac、macOS 26.6.2、SDK 10.0.401。隔离目录 `/Users/hobo/Projects/AgentDock-release-20261021`，未替换日常安装。源码归档 SHA-256：`eb1e4b4fd172fa58c5a5227f05c24ae9ca9fa8e0bac858d312984ce0992caa44`；复制后逐文件核对。归档之后继续修改 CI 配置、文档及下述测试清理；产品源码未变，GitHub 精确提交构建另记。
 
 - 运行时下载/归档安全测试 3/3；Core/Host 97 通过、7 跳过；Engine 基础回归 67 通过、36 跳过。
 - 开启真实 Mac 执行及 Keychain 条件后，Engine 84 通过、4 失败、20 跳过。4 个失败均为 SSH 会话不能完成 Keychain 写入；切换到已有图形登录会话，独立重跑 Keychain 6/6 通过。真实执行器的 15 项已通过；没有将两次结果伪写为一次全绿运行。
@@ -37,3 +37,9 @@
 两平台均 `partial=false`、`releaseReady=false`。当前账号无法管理 Hyper-V，未重跑新候选的干净 Windows VM 或严格冷缓存测试；历史 Windows VM 通过记录不自动继承。仍缺 Windows 公共代码签名和真实下载 SmartScreen、Mac Developer ID/公证/Gatekeeper、Mac 原生选择器/托盘/Toast/缩放/VoiceOver、用户桌面 App 新对话和当前安装版真实模型负载验收。独立旧变更审查完成；新增打包逻辑的外部审查因服务 429 失败，未作为审查通过计入。
 
 本记录证明本地候选验证；云端构建、附件核对及公开状态以对应 GitHub Actions / Release 链接和后续记录为准。
+
+## 首次云端构建
+
+提交 `10e50b2` 的 [Windows Actions](https://github.com/HoboCY/AgentDock/actions/runs/39538318019) 通过源码回归、完整打包、清单校验及 20 项安装门禁。[Mac 首次 Actions](https://github.com/HoboCY/AgentDock/actions/runs/39538319391) 原生运行时获取成功，但 HostIntegrationTests 两项在清理阶段失败：Host 创建的合成 Keychain 项目由不同代码身份的测试进程删除时返回 OSStatus -25244。该次运行计为失败，日志/TRX 已保留。
+
+测试夹具改用系统 security 工具按唯一 service/account 删除，并断言项目不再存在；不改生产凭据权限，也不吞掉清理失败。原生 Mac 定向复验 6 通过、1 条件跳过。云端另使用临时测试钥匙串并在 always 步骤删除整个测试钥匙串，同时启用六项 Keychain 回归。
