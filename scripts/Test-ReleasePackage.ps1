@@ -11,7 +11,8 @@ $manifest = @{
     schema = 1; product = 'AgentDock'; runtime = 'win-x64'; configuration = 'Release'
     version = $version; hostVersion = $version; partial = $false; selfContained = $true
     frameworkDependent = $false; missingComponents = @(); releaseReady = $false
-    releaseBlocked = @('unsigned'); components = @{}; artifacts = @{}
+    releaseBlocked = @('clean-vm-acceptance-missing'); warnings = @('unsigned')
+    components = @{}; artifacts = @{}
 }
 foreach ($name in 'host', 'desktop', 'engine', 'setup') { $manifest.components[$name] = @{ present = $true } }
 foreach ($item in @(
@@ -31,6 +32,29 @@ $manifest.artifacts.setup.payloadSha256 = $manifest.artifacts.payloadZip.sha256
 Set-Content -LiteralPath (Join-Path $package 'private-fixture.txt') -Value 'do not publish'
 $baseline = $manifest | ConvertTo-Json -Depth 8
 $caseCount = 0
+
+# 执行构建器实际门禁，避免合成清单绕过平台签名策略。
+$builder = Get-Content -Raw -LiteralPath "$PSScriptRoot/Build-Package.ps1"
+$policy = [regex]::Match($builder, '(?s)\$releaseBlocked = .*?(?=\r?\n\$packageManifest = )')
+if (-not $policy.Success) { throw '未找到构建器发布门禁。' }
+$checkPolicy = [scriptblock]::Create($policy.Value)
+foreach ($windows in @($true, $false)) {
+    & {
+        $isWindowsTarget = $windows
+        $warnings = [Collections.Generic.List[string]]::new()
+        $missingComponents = @()
+        $FrameworkDependent = $false
+        $SkipSetup = $false
+        . $checkPolicy
+        $unsignedBlocked = @($releaseBlocked | Where-Object { $_ -like 'unsigned*' }).Count -gt 0
+        $unsignedWarning = @($warnings | Where-Object { $_ -like 'unsigned*' }).Count -gt 0
+        if ($unsignedBlocked -eq $windows -or $unsignedWarning -ne $windows) { throw 'Windows 签名须为警告，Mac 签名仍须为门禁。' }
+        if ($releaseReady -or -not ($releaseBlocked -like 'clean-vm-acceptance-missing*')) { throw '签名可选不能清除其他验收门禁。' }
+        if (-not $windows -and -not ($releaseBlocked -like 'macos-real-device-acceptance-missing*')) { throw 'Mac 实机门禁丢失。' }
+    }
+    $caseCount++
+    Write-Host "PASS signing-policy-windows-$windows"
+}
 
 function Invoke-PackageCase([string]$Name, [scriptblock]$Mutate, [bool]$Reject) {
     $script:caseCount++
@@ -56,6 +80,8 @@ function Invoke-PackageCase([string]$Name, [scriptblock]$Mutate, [bool]$Reject) 
         }
         if ([IO.File]::ReadAllText((Join-Path $output 'SHA256SUMS.txt')).Contains("`r")) { throw '校验清单必须使用 LF。' }
         if ((Get-Content -Raw -LiteralPath (Join-Path $output 'release-notes.md')) -notmatch 'releaseReady=false') { throw '发行限制丢失。' }
+        $publishedManifest = Get-Content -Raw -LiteralPath (Join-Path $output 'package-manifest.json') | ConvertFrom-Json
+        if ($publishedManifest.warnings -notcontains 'unsigned' -or $publishedManifest.releaseBlocked -contains 'unsigned') { throw '发布清单必须保留未签名警告，不能将其改为 Windows 阻塞项。' }
         $retryFailed = $false
         try { & "$PSScriptRoot/Prepare-Release.ps1" -Version $version -PackageDir $package -OutputDir $output }
         catch { $retryFailed = $true }

@@ -38,8 +38,10 @@
 
 适合先做 Windows 小范围未签名测试版。此前 Windows 干净系统、Mac 本地候选及真实任务的验收证据见 [验收矩阵](validation/acceptance.md)，这些结果属于各自的版本，不能自动继承为新标签的验收。
 
-稳定版仍需完成 [#4](https://github.com/HoboCY/AgentDock/issues/4)、[#9](https://github.com/HoboCY/AgentDock/issues/9)、[#10](https://github.com/HoboCY/AgentDock/issues/10)、[#12](https://github.com/HoboCY/AgentDock/issues/12) 中的严格冷启动、Mac 原生交互/可访问性、当前安装版真实负载和发行交付检查；其中 Windows 签名及真实下载后的 SmartScreen、Mac Developer ID/公证/Gatekeeper 尚未完成。当前构建器始终保守标记 `releaseReady=false`。
+按维护者 2026-10-21 的决定，Windows 代码签名为可选增强项，不是稳定版发布的必需条件。未签名状态保留在构建清单 `warnings` 和发行说明中，不列入 Windows `releaseBlocked`；哈希、完整性及安装门禁继续执行。
+
+稳定版仍需完成对应平台的验收：[#4](https://github.com/HoboCY/AgentDock/issues/4)、[#10](https://github.com/HoboCY/AgentDock/issues/10) 的严格冷启动、当前候选干净系统安装/接入/任务及真实下载后的 SmartScreen 路径；Mac 的 [#9](https://github.com/HoboCY/AgentDock/issues/9)、[#12](https://github.com/HoboCY/AgentDock/issues/12) 原生交互/可访问性、当前安装版真实负载和 Developer ID/公证/Gatekeeper 要求保持不变。Windows 下载验收需如实记录系统提示及可执行安装路径，不要求因签名消除全部信誉提示。当前构建器仍因未完成验收标记 `releaseReady=false`，稳定标签暂不开放。
 
 测试版须从 Releases 页面手动获取；应用内更新查询使用 GitHub 的稳定版 `releases/latest`，不会提示预发布更新。
 
-签名身份准备与保管见 [发行签名准备](signing.md)。未具备身份和同一候选的验收证据前，不开放稳定标签或修改 `releaseReady`。
+可选的 Windows 签名准备与 macOS 必需的发行身份见 [发行签名准备](signing.md)。只有对应平台同一候选的必需验收完成后，才能开放稳定标签或修改 `releaseReady`。

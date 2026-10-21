@@ -370,7 +370,11 @@ if ($setupArtifact) {
 }
 
 $releaseBlocked = New-Object System.Collections.Generic.List[string]
-$releaseBlocked.Add('unsigned：安装程序与程序文件均未代码签名') | Out-Null
+if ($isWindowsTarget) {
+    $warnings.Add('unsigned：安装程序与程序文件均未代码签名，可能出现 SmartScreen 提示（Windows 签名为可选项）') | Out-Null
+} else {
+    $releaseBlocked.Add('unsigned：安装程序与程序文件均未代码签名') | Out-Null
+}
 $releaseBlocked.Add('clean-vm-acceptance-missing：尚未在干净 Windows 虚机完成安装/接入/最小任务验收') | Out-Null
 if (-not $isWindowsTarget) { $releaseBlocked.Add('macos-real-device-acceptance-missing：未经 V2 真机验收，不得声称支持 macOS') | Out-Null }
 if ($missingComponents.Count -gt 0) { $releaseBlocked.Add("partial-package：缺少组件 $($missingComponents -join ', ')") | Out-Null }

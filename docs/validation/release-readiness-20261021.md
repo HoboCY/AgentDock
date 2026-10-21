@@ -59,3 +59,7 @@
 公开清单 SHA-256：`2e028d5f56f2bb8b44683f04f7a03fb82296458e500cabf7d167eeade7601037`。
 
 详细证据：`github-release-verification.json`、`public-release-verification.json`、`windows-ci-final.log`、`mac-ci-final.log`。公开测试版没有解除本记录列出的稳定发行缺口。
+
+## 后续策略调整：Windows 签名可选
+
+维护者确认 Windows 代码签名不作为必需项。后续构建将未签名状态从 Windows `releaseBlocked` 移到 `warnings`，保留发行说明、哈希与安装校验；真实下载/SmartScreen 路径及其他未完成验收继续保留。macOS Developer ID、公证与 Gatekeeper 门槛不变。以上原始验收和 beta.2 附件仍保留当时的清单与哈希，不因策略调整改写为稳定发行通过。

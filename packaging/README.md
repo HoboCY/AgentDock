@@ -111,6 +111,6 @@ Windows 分发 EXE 在上述 ZIP 完成后再次构建，将 ZIP 作为资源内
   与内置 Git 的归档/`sh.exe` 哈希；只有 `releaseReady == true` 才允许作为稳定发行候选。
 - 未签名测试版可使用 [GitHub 预发布流程](../docs/releasing.md)：必须完整、自包含并通过自动化和安装门禁，保留 `releaseReady=false` 与全部阻塞项，明确标注 Pre-release，不成为 Latest。默认只创建草稿；公开测试版由维护者发布草稿或手动关闭 `draft`。
 - Git（MinGit）缺失或哈希不符时构建必然失败——发行包不允许要求系统预装 Git。
-- Windows 签名与干净虚机、Mac Developer ID 签名/公证与下载后的 Gatekeeper 验收分别作为发布门槛；公开发布需明确授权。真实 Mac 功能验收已完成，当前包保持 `releaseReady=false`，不能把本地可运行当成发行通过。
+- Windows 代码签名为可选项；未签名状态写入 `warnings`，不写入 Windows `releaseBlocked`。干净虚机、真实下载后的系统提示与安装路径仍需验收。Mac Developer ID 签名/公证与下载后的 Gatekeeper 门槛不变；公开发布需明确授权。当前包仍因未完成验收保持 `releaseReady=false`，不能把本地可运行当成发行通过。
 
 Mac arm64 使用 [独立锁文件和打包说明](mac/README.md)。其最终 payload、安装器 ZIP/DMG、运行时来源和实机结果见 [macos.md](../docs/validation/macos.md)。
