@@ -54,18 +54,19 @@ internal sealed class MainForm : Form
 
         Log($"安装根目录：{_layout.Root}");
         var payload = Installer.FindPayload();
-        Log(payload is null ? "未在安装程序旁找到 payload.zip / payload/。" : $"找到安装包：{payload}");
+        Log(payload == Payload.BundledSource ? "完整程序包已就绪，点击“安装 / 应用更新”即可。"
+            : payload is null ? "请使用下载的完整安装程序安装或更新 AgentDock。" : $"找到安装包：{payload}");
         RefreshState();
     }
 
     private void BeginInstall()
     {
-        var payload = Installer.FindPayload();
-        if (payload is null)
+        var payload = Payload.HasBundledPayload ? null : Installer.FindPayload();
+        if (payload is null && !Payload.HasBundledPayload)
         {
             using var dialog = new OpenFileDialog
             {
-                Title = "选择 AgentDock 安装包（payload zip）",
+                Title = "选择 AgentDock 程序包（维护用途）",
                 Filter = "AgentDock 安装包 (*.zip)|*.zip|所有文件 (*.*)|*.*",
                 CheckFileExists = true
             };
@@ -90,6 +91,7 @@ internal sealed class MainForm : Form
             }
             catch (Exception ex)
             {
+                _layout.Log("安装失败：" + ex.Message);
                 Log("安装失败：" + ex.Message);
             }
             finally

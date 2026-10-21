@@ -20,4 +20,8 @@
     <ProjectReference Include="..\AgentDock.Core\AgentDock.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(BundledPayloadPath)' != ''">
+    <EmbeddedResource Include="$(BundledPayloadPath)" LogicalName="AgentDock.Payload.zip" />
+  </ItemGroup>
+
 </Project>

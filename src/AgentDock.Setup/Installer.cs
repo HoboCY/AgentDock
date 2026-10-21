@@ -9,7 +9,7 @@ internal static class Installer
     public static InstallOutcome Install(InstallLayout layout, string? payloadArg, bool noShellIntegration, Action<string> log)
     {
         var payloadPath = ResolvePayloadPath(payloadArg);
-        log($"安装源：{payloadPath}");
+        log(payloadPath == Payload.BundledSource ? "使用安装程序内置的程序包。" : $"安装源：{payloadPath}");
         var manifest = Payload.ReadManifest(payloadPath);
         ValidateForInstall(manifest);
 
@@ -63,7 +63,7 @@ internal static class Installer
         try
         {
             Directory.CreateDirectory(staging);
-            log("校验并展开 payload...");
+            log("正在校验并安装程序文件...");
             if (Directory.Exists(payloadPath))
             {
                 Payload.CopyDirectory(payloadPath, staging);
@@ -105,7 +105,7 @@ internal static class Installer
 
         try
         {
-            EnsureLauncher(layout, log);
+            EnsureLauncher(layout, versionDir, log);
         }
         catch (Exception ex)
         {
@@ -181,8 +181,16 @@ internal static class Installer
         log($"已刷新插件源：{layout.StablePluginDir}");
     }
 
-    public static void EnsureLauncher(InstallLayout layout, Action<string> log)
+    public static void EnsureLauncher(InstallLayout layout, string versionDir, Action<string> log)
     {
+        // 从已校验的程序包安装精简启动器，避免日常启动携带整份分发包。
+        var launcher = Path.Combine(versionDir, "setup", "AgentDock.Setup.exe");
+        if (File.Exists(launcher))
+        {
+            File.Copy(launcher, layout.LauncherPath, overwrite: true);
+            log($"稳定启动器：{layout.LauncherPath}");
+            return;
+        }
         var self = Environment.ProcessPath;
         if (self is null)
         {
@@ -220,6 +228,7 @@ internal static class Installer
 
     public static string? FindPayload(string? baseDirectory = null)
     {
+        if (baseDirectory is null && Payload.HasBundledPayload) return Payload.BundledSource;
         var baseDir = baseDirectory ?? SetupDirectory();
         var plain = Path.Combine(baseDir, "payload.zip");
         if (File.Exists(plain)) return plain;
@@ -244,7 +253,7 @@ internal static class Installer
             return full;
         }
         return FindPayload() ?? throw new InvalidOperationException(
-            "未找到安装包。请把 payload.zip（或 payload/ 目录）放在安装程序旁边，或用 --payload 指定路径。");
+            "未找到程序包。请下载完整的 AgentDock 安装程序；维护工具可用 --payload 指定程序包路径。");
     }
 
     public static string SetupDirectory()

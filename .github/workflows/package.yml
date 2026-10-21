@@ -141,14 +141,18 @@ jobs:
           if (-not $setup) { throw '未找到安装程序。' }
           if (-not $payload) { throw '未找到 payload zip。' }
           $hostExe = Join-Path $env:RUNNER_TEMP 'agentdock-gate-host/AgentDock.Host.exe'
+          $launcher = Join-Path $env:RUNNER_TEMP 'agentdock-gate-host/AgentDock.Setup.exe'
           New-Item -ItemType Directory -Path (Split-Path -Parent $hostExe) -Force | Out-Null
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead($payload.FullName)
           try {
             $entry = $zip.Entries | Where-Object { $_.FullName -eq 'host/AgentDock.Host.exe' } | Select-Object -First 1
             if ($entry) { [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $hostExe, $true) }
+            $entry = $zip.GetEntry('setup/AgentDock.Setup.exe')
+            if (-not $entry) { throw '程序包缺少精简启动器。' }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $launcher, $true)
           } finally { $zip.Dispose() }
-          $gateArgs = @{ SetupExe = $setup.FullName; Payload = $payload.FullName }
+          $gateArgs = @{ SetupExe = $launcher; BundledSetupExe = $setup.FullName; Payload = $payload.FullName }
           if (Test-Path -LiteralPath $hostExe) { $gateArgs.HostExe = $hostExe }
           & ./scripts/Test-SetupGates.ps1 @gateArgs
 
@@ -204,7 +208,6 @@ jobs:
           if [[ "$RELEASE_DRAFT" == "true" ]]; then flags+=(--draft); fi
           gh release create "v$RELEASE_VERSION" \
             "AgentDockSetup-$RELEASE_VERSION-win-x64.exe" \
-            "AgentDock-$RELEASE_VERSION-win-x64.zip" \
             package-manifest.json SHA256SUMS.txt \
             --verify-tag --prerelease --latest=false "${flags[@]}" \
             --title "AgentDock $RELEASE_VERSION (Windows preview)" \

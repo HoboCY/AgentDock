@@ -20,18 +20,26 @@ public static partial class SmokeTest
         checks.Add("first-launch-opens-onboarding");
         var originalWidth = main.Width;
         var originalHeight = main.Height;
-        main.Width = 900;
-        main.Height = 600;
+        main.Width = main.MinWidth;
+        main.Height = main.MinHeight;
         foreach (var label in new[] { "1  启动后台", "2  保存凭据", "3  接入 Codex", "4  启用委派" })
         {
             ClickSetup(main, label);
             await Task.Delay(150);
-            foreach (var action in new[] { "稍后配置", "重新检查", "上一步" })
+            foreach (var button in main.GetVisualDescendants().OfType<Button>().Where(button => button.IsEffectivelyVisible && button.Parent is StackPanel))
             {
-                var button = SetupButton(main, action);
                 var point = button.TranslatePoint(default, main)!.Value;
-                if (point.X < 200 || point.Y < 0 || point.X + button.Bounds.Width > main.Bounds.Width || point.Y + button.Bounds.Height > main.Bounds.Height)
-                    throw new InvalidOperationException("Setup navigation must remain visible at 900 x 600.");
+                if (point.X < 0 || point.X + button.Bounds.Width > main.Bounds.Width)
+                    throw new InvalidOperationException("Setup buttons must fit horizontally at the minimum window size.");
+            }
+            var back = SetupButton(main, "上一步");
+            var navigation = (StackPanel)back.Parent!;
+            var fixedActions = new[] { SetupButton(main, "稍后配置"), SetupButton(main, "重新检查"), SetupButton(main, "显示悬浮窗") };
+            foreach (var button in fixedActions.Concat(navigation.Children.OfType<Button>()))
+            {
+                var point = button.TranslatePoint(default, main)!.Value;
+                if (!button.IsEffectivelyVisible || point.X < 0 || point.Y < 0 || point.X + button.Bounds.Width > main.Bounds.Width || point.Y + button.Bounds.Height > main.Bounds.Height)
+                    throw new InvalidOperationException("Setup navigation must remain visible at the minimum window size.");
             }
             Capture(main, outputPath + ".onboarding-step" + label[0] + ".png");
         }

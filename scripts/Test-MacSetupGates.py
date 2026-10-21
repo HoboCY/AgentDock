@@ -163,8 +163,15 @@ def main():
             (candidate/'host/AgentDock.Host').unlink()
             (candidate/'host/AgentDock.Host').symlink_to('/bin/true')
         (candidate/'payload-manifest.json').write_text(json.dumps(manifest))
-        run(['--apply-update','--payload',str(candidate)],False)
+        config = data/'config.json'
+        config.write_text('{"acceptanceFixture":true}')
+        config_before = digest(config)
+        result = run(['--apply-update','--payload',str(candidate)],False)
         assert (root/'install/current.json').read_bytes()==current_before
+        assert digest(config)==config_before
+        assert not (root/'install/update.lock').exists()
+        reason = result.stderr.strip().removeprefix('AgentDock 安装程序错误：')
+        assert reason and reason in (root/'install/setup.log').read_text(), 'failure reason missing from setup.log'
     for kind in ('hash','path','partial','mode','missing-mode','missing-component','runtime','symlink'):
         case('reject-'+kind,lambda kind=kind:malformed(kind))
 

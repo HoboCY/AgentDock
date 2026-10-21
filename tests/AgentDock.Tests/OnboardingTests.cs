@@ -270,6 +270,29 @@ public sealed class OnboardingTests : IDisposable
         Assert.Equal(ready, CodexIntegration.ParseStatus(json, "codex", market).Registered);
     }
 
+    [MacPathFact]
+    public void Mac_plugin_status_resolves_a_symlinked_install_directory()
+    {
+        var real = Directory.CreateDirectory(Path.Combine(root, "actual", "plugin")).FullName;
+        var alias = Path.Combine(root, "install-link");
+        Directory.CreateSymbolicLink(alias, Path.GetDirectoryName(real)!);
+        var json = JsonSerializer.Serialize(new { installed = new[] { new { pluginId = "agentdock@agentdock-local", enabled = true, installed = true, marketplaceSource = new { source = real } } } });
+
+        Assert.True(CodexIntegration.ParseStatus(json, "codex", Path.Combine(alias, "plugin")).Registered);
+    }
+
+    [MacPathFact]
+    public void Mac_plugin_status_uses_the_volumes_actual_case_semantics()
+    {
+        var real = Directory.CreateDirectory(Path.Combine(root, "MixedCase", "plugin")).FullName;
+        var alternate = Path.Combine(root, "mixedcase", "plugin");
+        var sameDirectory = Directory.Exists(alternate);
+        if (!sameDirectory) Directory.CreateDirectory(alternate);
+        var json = JsonSerializer.Serialize(new { installed = new[] { new { pluginId = "agentdock@agentdock-local", enabled = true, installed = true, marketplaceSource = new { source = real } } } });
+
+        Assert.Equal(sameDirectory, CodexIntegration.ParseStatus(json, "codex", alternate).Registered);
+    }
+
     [Fact]
     public void Missing_plugin_is_not_registered_and_unknown_contract_is_not_ready()
     {

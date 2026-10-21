@@ -70,37 +70,45 @@ internal static class Cli
         }
 
         var layout = InstallLayout.Resolve(options.Root);
-        switch (options.Mode)
+        try
         {
-            case SetupMode.Help:
-                PrintUsage();
-                return 0;
-            case SetupMode.Version:
-                var assembly = typeof(Cli).Assembly;
-                var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                    ?? assembly.GetName().Version?.ToString() ?? "0.0.0";
-                Log($"AgentDock Setup {version}");
-                return 0;
-            case SetupMode.Status:
-                return Status(layout, options);
-            case SetupMode.Install:
-                return Install(layout, options);
-            case SetupMode.Launch:
-                Installer.Launch(layout, options.Tray);
-                return 0;
-            case SetupMode.Uninstall:
-                return Uninstall(layout, options);
-            case SetupMode.ApplyUpdate:
-                return ApplyUpdate(layout, options);
-            case SetupMode.CleanupSelf:
-                if (options.CleanupTarget is null) throw new ArgumentException("--cleanup-self 需要目标路径。");
-                Uninstaller.CleanupSelf(options.CleanupTarget, options.WaitPid);
-                return 0;
-            default:
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new MainForm(layout));
-                return 0;
+            switch (options.Mode)
+            {
+                case SetupMode.Help:
+                    PrintUsage();
+                    return 0;
+                case SetupMode.Version:
+                    var assembly = typeof(Cli).Assembly;
+                    var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                        ?? assembly.GetName().Version?.ToString() ?? "0.0.0";
+                    Log($"AgentDock Setup {version}");
+                    return 0;
+                case SetupMode.Status:
+                    return Status(layout, options);
+                case SetupMode.Install:
+                    return Install(layout, options);
+                case SetupMode.Launch:
+                    Installer.Launch(layout, options.Tray);
+                    return 0;
+                case SetupMode.Uninstall:
+                    return Uninstall(layout, options);
+                case SetupMode.ApplyUpdate:
+                    return ApplyUpdate(layout, options);
+                case SetupMode.CleanupSelf:
+                    if (options.CleanupTarget is null) throw new ArgumentException("--cleanup-self 需要目标路径。");
+                    Uninstaller.CleanupSelf(options.CleanupTarget, options.WaitPid);
+                    return 0;
+                default:
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    Application.Run(new MainForm(layout));
+                    return 0;
+            }
+        }
+        catch (Exception ex) when (options.Mode is SetupMode.Install or SetupMode.ApplyUpdate)
+        {
+            layout.Log($"安装程序失败（{options.Mode}）：{ex.Message}");
+            throw;
         }
     }
 
@@ -142,6 +150,7 @@ internal static class Cli
             dataHome = layout.DataDir,
             launcher = layout.LauncherPath,
             updateLock = File.Exists(layout.UpdateLockPath),
+            bundledPayload = Payload.HasBundledPayload,
             payload,
             payloadVersion
         };
@@ -187,7 +196,6 @@ internal static class Cli
 
     private static int ApplyUpdate(InstallLayout layout, SetupOptions options)
     {
-        if (options.Payload is null) throw new ArgumentException("--apply-update 需要 --payload <zip|目录>。");
         var payloadPath = Installer.ResolvePayloadPath(options.Payload);
         var manifest = Payload.ReadManifest(payloadPath);
         var outcome = Updater.ApplyUpdate(layout, payloadPath, manifest, options.NoShellIntegration, Log);
@@ -206,7 +214,7 @@ internal static class Cli
               AgentDockSetup.exe --install [--payload <zip|目录>] [--silent] [--no-shell-integration] [--root <目录>]
               AgentDockSetup.exe --launch [--tray] [--root <目录>]
               AgentDockSetup.exe --uninstall [--silent]
-              AgentDockSetup.exe --apply-update --payload <zip|目录> [--silent]
+              AgentDockSetup.exe --apply-update [--payload <zip|目录>] [--silent]
               AgentDockSetup.exe --status [--root <目录>] [--out <json 文件>]
               AgentDockSetup.exe --version
 
@@ -214,6 +222,7 @@ internal static class Cli
               --root <目录>   覆盖安装根目录（默认 %LOCALAPPDATA%\AgentDock，供测试/便携场景使用）
               --out <文件>    把 --status 的 JSON 写入文件（GUI 子系统程序不便直接管道捕获）
               --silent        不显示确认对话框（卸载）
+              安装与更新默认使用内置程序包；--payload 仅供维护或旧版分体包使用。
               更新只由用户主动选择；有排队/运行/暂停任务时拒绝应用更新。
             """);
     }

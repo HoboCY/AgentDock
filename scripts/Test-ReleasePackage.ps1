@@ -26,6 +26,8 @@ foreach ($item in @(
     }
 }
 # 目录里的无关文件不能成为发布附件。
+$manifest.artifacts.setup.embeddedPayload = $true
+$manifest.artifacts.setup.payloadSha256 = $manifest.artifacts.payloadZip.sha256
 Set-Content -LiteralPath (Join-Path $package 'private-fixture.txt') -Value 'do not publish'
 $baseline = $manifest | ConvertTo-Json -Depth 8
 $caseCount = 0
@@ -45,9 +47,9 @@ function Invoke-PackageCase([string]$Name, [scriptblock]$Mutate, [bool]$Reject) 
     } else {
         if ($failure) { throw $failure }
         $names = @(Get-ChildItem -LiteralPath $output -File | Select-Object -ExpandProperty Name)
-        if ($names.Count -ne 5 -or $names -contains 'private-fixture.txt') { throw '发布附件范围不正确。' }
+        if ($names.Count -ne 4 -or $names -contains 'private-fixture.txt' -or $names -contains "AgentDock-$version-win-x64.zip") { throw '发布附件范围不正确。' }
         $sums = Get-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt')
-        if ($sums.Count -ne 3) { throw '校验清单缺少附件。' }
+        if ($sums.Count -ne 2) { throw '校验清单缺少附件。' }
         foreach ($line in $sums) {
             $hash, $file = $line -split '  ', 2
             if ((Get-FileHash -LiteralPath (Join-Path $output $file)).Hash.ToLowerInvariant() -cne $hash) { throw '校验清单不正确。' }
@@ -63,6 +65,8 @@ function Invoke-PackageCase([string]$Name, [scriptblock]$Mutate, [bool]$Reject) 
 }
 
 Invoke-PackageCase 'valid-preview' {} $false
+Invoke-PackageCase 'unbundled-installer' { param($m) $m.artifacts.setup.embeddedPayload = $false } $true
+Invoke-PackageCase 'mismatched-bundle' { param($m) $m.artifacts.setup.payloadSha256 = '0' * 64 } $true
 Invoke-PackageCase 'partial' { param($m) $m.partial = $true } $true
 Invoke-PackageCase 'missing-component' { param($m) $m.components.engine.present = $false } $true
 Invoke-PackageCase 'framework-dependent' { param($m) $m.selfContained = $false; $m.frameworkDependent = $true } $true

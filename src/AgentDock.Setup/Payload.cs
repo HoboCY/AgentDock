@@ -6,7 +6,20 @@ namespace AgentDock.Setup;
 internal static class Payload
 {
     public const string ManifestEntryName = "payload-manifest.json";
+    public const string BundledSource = "embedded:AgentDock.Payload.zip";
+    private const string BundledResource = "AgentDock.Payload.zip";
+    public static bool HasBundledPayload => typeof(Payload).Assembly.GetManifestResourceNames().Contains(BundledResource);
     private const int BufferSize = 1024 * 1024;
+
+    private static ZipArchive OpenZip(string path)
+    {
+        var stream = path == BundledSource
+            ? typeof(Payload).Assembly.GetManifestResourceStream(BundledResource)
+                ?? throw new InvalidDataException("安装程序缺少内置程序包，请重新下载安装程序。")
+            : File.OpenRead(path);
+        try { return new ZipArchive(stream, ZipArchiveMode.Read); }
+        catch { stream.Dispose(); throw; }
+    }
 
     public static PayloadManifest ReadManifest(string payloadPath)
     {
@@ -22,7 +35,7 @@ internal static class Payload
         ZipArchive zip;
         try
         {
-            zip = ZipFile.OpenRead(payloadPath);
+            zip = OpenZip(payloadPath);
         }
         catch (Exception ex)
         {
@@ -41,7 +54,7 @@ internal static class Payload
     /// <summary>从 payload ZIP 解压到 staging，逐文件校验 SHA-256 与体积；出现清单外文件或符号链接即失败。</summary>
     public static PayloadManifest ExtractZip(string zipPath, string stagingDir)
     {
-        using var zip = ZipFile.OpenRead(zipPath);
+        using var zip = OpenZip(zipPath);
         var manifestEntry = zip.Entries.FirstOrDefault(e => Normalize(e.FullName) == ManifestEntryName)
             ?? throw new InvalidDataException($"payload 压缩包缺少 {ManifestEntryName}：{zipPath}");
         PayloadManifest manifest;

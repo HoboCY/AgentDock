@@ -5,8 +5,8 @@
 
 .DESCRIPTION
   构建固定版本组合的安装包：
-    AgentDockSetup-<version>-win-x64.exe    自包含安装程序（每用户安装，无需管理员）
-    AgentDock-<version>-win-x64.zip         payload（desktop/ host/ engine/ engines/ plugin/）
+    AgentDockSetup-<version>-win-x64.exe    内置完整程序包的安装程序（每用户安装，无需管理员）
+    AgentDock-<version>-win-x64.zip         构建/维护用程序包，普通用户无需另行下载
     package-manifest.json                   构件清单（哈希、组件状态、发布阻塞项）
 
   组件项目缺失或发布产物缺少预期 exe 时默认失败；-AllowPartial 生成 partial 包（仅用于 CI 与打包链路自检），
@@ -83,7 +83,7 @@ function Resolve-ComponentProject {
 }
 
 function Publish-Component {
-    param([string]$Project, [string]$Destination, [string]$Label, [string]$VersionOverride)
+    param([string]$Project, [string]$Destination, [string]$Label, [string]$VersionOverride, [string]$BundledPayload)
     Write-Host "== 发布 $Label：$Project"
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     $arguments = @('publish', $Project, '-c', $Configuration, '-r', $Runtime, '-o', $Destination, '--nologo', '-m:1', '--disable-build-servers', '-nr:false', '-p:UseSharedCompilation=false')
@@ -95,6 +95,7 @@ function Publish-Component {
     if ($VersionOverride) {
         $arguments += @("-p:Version=$VersionOverride")
     }
+    if ($BundledPayload) { $arguments += "-p:BundledPayloadPath=$BundledPayload" }
     if ($Offline) {
         # 离线构建无法获取 NuGet 漏洞数据；关闭审计，避免 NU1900 被 TreatWarningsAsErrors 升级为错误。
         $arguments += @('-p:NuGetAudit=false')
@@ -284,13 +285,10 @@ Copy-Item -LiteralPath (Join-Path $repoRoot 'docs/licenses') -Destination (Join-
 # ---- 安装程序 ----
 $setupArtifact = $null
 if ($isWindowsTarget -and -not $SkipSetup) {
-    Write-Host "== 发布安装程序"
-    Publish-Component -Project (Join-Path $repoRoot 'src/AgentDock.Setup/AgentDock.Setup.csproj') -Destination $setupStage -Label 'setup' -VersionOverride $Version
-    $setupExe = Get-ChildItem -LiteralPath $setupStage -File -Filter '*.exe' | Select-Object -First 1
-    if (-not $setupExe) { throw "安装程序发布输出中没有 exe。" }
-    $setupArtifact = Join-Path $OutputDir "AgentDockSetup-$Version-$Runtime.exe"
-    Copy-Item -LiteralPath $setupExe.FullName -Destination $setupArtifact -Force
-    $components['setup'] = [ordered]@{ present = $true; file = (Split-Path -Leaf $setupArtifact) }
+    Write-Host "== 发布精简启动器"
+    Publish-Component -Project (Join-Path $repoRoot 'src/AgentDock.Setup/AgentDock.Setup.csproj') -Destination (Join-Path $stage 'setup') -Label 'launcher' -VersionOverride $Version
+    if (-not (Test-Path -LiteralPath (Join-Path $stage 'setup/AgentDock.Setup.exe'))) { throw '启动器发布输出中没有 exe。' }
+    $components['setup'] = [ordered]@{ present = $true; file = "AgentDockSetup-$Version-$Runtime.exe" }
 } elseif ($isWindowsTarget) {
     $components['setup'] = [ordered]@{ present = $false; reason = 'skipped' }
     $warnings.Add('已跳过安装程序构建（-SkipSetup）。') | Out-Null
@@ -327,7 +325,7 @@ function Get-Sha256([string]$Path) { return (Get-FileHash -Algorithm SHA256 -Lit
 
 $zipArtifact = $null
 $folderArtifact = $null
-if ($PayloadFormat -in @('zip', 'both')) {
+if ($PayloadFormat -in @('zip', 'both') -or ($isWindowsTarget -and -not $SkipSetup)) {
     $zipArtifact = Join-Path $OutputDir "AgentDock-$Version-$Runtime.zip"
     if (Test-Path -LiteralPath $zipArtifact) { Remove-Item -LiteralPath $zipArtifact -Force }
     Write-Host "== 生成 payload 压缩包：$zipArtifact"
@@ -336,8 +334,17 @@ if ($PayloadFormat -in @('zip', 'both')) {
 }
 if ($PayloadFormat -in @('folder', 'both')) {
     $folderArtifact = Join-Path $OutputDir "payload-$Runtime"
-    if (Test-Path -LiteralPath $folderArtifact) { Remove-Item -LiteralPath $folderArtifact -Recurse -Force }
+    Remove-Safe $folderArtifact
     Copy-Item -LiteralPath $stage -Destination $folderArtifact -Recurse -Force
+}
+
+# 在程序包完成后构建单文件安装器；内置 ZIP 与维护用 ZIP 是相同字节。
+if ($isWindowsTarget -and -not $SkipSetup) {
+    Publish-Component -Project (Join-Path $repoRoot 'src/AgentDock.Setup/AgentDock.Setup.csproj') -Destination $setupStage -Label 'bundled setup' -VersionOverride $Version -BundledPayload $zipArtifact
+    $setupExe = Join-Path $setupStage 'AgentDock.Setup.exe'
+    if (-not (Test-Path -LiteralPath $setupExe)) { throw '完整安装程序发布输出中没有 exe。' }
+    $setupArtifact = Join-Path $OutputDir "AgentDockSetup-$Version-$Runtime.exe"
+    Copy-Item -LiteralPath $setupExe -Destination $setupArtifact -Force
 }
 
 # ---- package-manifest.json ----
@@ -357,6 +364,8 @@ if ($setupArtifact) {
         file   = (Split-Path -Leaf $setupArtifact)
         size   = [long](Get-Item -LiteralPath $setupArtifact).Length
         sha256 = Get-Sha256 $setupArtifact
+        embeddedPayload = $true
+        payloadSha256 = Get-Sha256 $zipArtifact
     }
 }
 

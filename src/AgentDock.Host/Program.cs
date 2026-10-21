@@ -118,7 +118,14 @@ public static class Program
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await listener.WaitForConnectionAsync(cancellationToken);
+                try { await listener.WaitForConnectionAsync(cancellationToken); }
+                catch (IOException error) when (OperatingSystem.IsWindows() && (error.HResult & 0xffff) == 232)
+                {
+                    // 客户端可能在 accept 完成前断开；该实例已关闭，替换后继续服务。
+                    listener.Dispose();
+                    listener = NewListener();
+                    continue;
+                }
                 var pipe = listener;
                 // On Unix the last disposed instance removes the shared socket.
                 // Retain the next listener before a fast request can finish.

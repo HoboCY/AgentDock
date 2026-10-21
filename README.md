@@ -2,13 +2,15 @@
 
 面向 Codex 外部子代理的 Windows / macOS 桌面控制台。任务由 Codex 派发；主面板、托盘和透明悬浮窗用于配置、监控、查看结果和停止任务。
 
-实现基线：[Issue #1](https://github.com/HoboCY/AgentDock/issues/1)。两平台本地安装包和五角色真实账户链路已验证；完整记录及发行缺口见 [验收矩阵](docs/validation/acceptance.md) 和 [Mac 记录](docs/validation/macos.md)。当前为本地候选，尚不声明发行就绪。
+实现基线：[Issue #1](https://github.com/HoboCY/AgentDock/issues/1)。两平台已有本地安装包和五角色真实账户链路验证记录；完整记录及发行缺口见 [验收矩阵](docs/validation/acceptance.md) 和 [Mac 记录](docs/validation/macos.md)。Windows 已提供[公开测试版](https://github.com/HoboCY/AgentDock/releases)，尚不声明稳定发行就绪。
 
 ## 安装与使用
 
 见 [Windows 安装说明](docs/installation.md) 和 [Mac 安装说明](packaging/mac/README.md)。包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 Git；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在各设备主面板独立配置，不迁移既有 MCP 凭据或角色。
 
 维护者通过 [GitHub 预发布流程](docs/releasing.md) 生成 Windows 测试版：测试标签自动构建并生成 Release 草稿，门禁通过后可手动公开发布；当前不声明稳定发行就绪。
+
+新版 Windows 安装器内置完整程序包，用户只需下载 EXE；JSON 清单与校验文件均为可选维护资料。旧版 beta.1 的分体包按其 Release 说明安装。
 
 默认全局并发 4；同项目及父子项目的写任务串行。关闭窗口不会停止任务，重连不会重跑。完全退出是独立操作。后台异常退出后，已运行任务中断，队列暂停；Codex 需明确决定后续执行。
 

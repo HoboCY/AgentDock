@@ -1,6 +1,6 @@
 # GitHub 预发布
 
-现有 `package` 工作流负责 Windows x64 构建、测试、安装门禁和 GitHub Release。当前只接受带测试后缀的版本，例如 `v0.1.1-beta.1`；稳定发行条件尚未满足，不支持 `v0.1.1` 稳定标签。macOS 的交叉构建配方不上传到 Release，原生打包流程见 [Mac 说明](../packaging/mac/README.md)。
+现有 `package` 工作流负责 Windows x64 构建、测试、安装门禁和 GitHub Release。当前只接受带测试后缀的版本，例如 `v0.1.1-beta.2`；稳定发行条件尚未满足，不支持 `v0.1.1` 稳定标签。`package-macos` 在标签推送或手动触发时用 ARM64 Mac 原生构建并验证 APP/DMG，保留未签名 Actions artifact；它不自动发布 Mac Release，不能替代签名、公证及人工交互验收。
 
 ## 创建测试版
 
@@ -25,9 +25,10 @@
 
 ## 附件与门禁
 
-- `AgentDockSetup-<版本>-win-x64.exe` 与 `AgentDock-<版本>-win-x64.zip` 必须一起下载、放在同一目录。
+- 用户只下载 `AgentDockSetup-<版本>-win-x64.exe`；完整程序包已内嵌，不依赖旁边的 ZIP。构建用 ZIP 保留在打包产物中，不上传为 Release 下载附件。
 - `package-manifest.json` 保留原始组件信息、哈希及 `releaseReady`/`releaseBlocked`，不把构建成功改写为稳定发行就绪。
-- `SHA256SUMS.txt` 覆盖上述三项附件；发布 job 在下载构建产物后再次校验。
+- `package-manifest.json` 和 `SHA256SUMS.txt` 是可选维护资料，普通安装无需下载或编辑。安装器内的 `payload-manifest.json` 仍用于逐文件完整性校验。
+- `SHA256SUMS.txt` 覆盖 EXE 与 `package-manifest.json`；发布 job 在下载构建产物后再次校验。
 
 发布前运行 .NET 回归、完整包构建、内置 Git 哈希检查及隔离安装门禁。额外检查平台、构建版本、Host 版本、自包含状态、必需组件、文件名、体积与 SHA-256；partial 包、缺少安装器、版本不匹配和损坏附件均拒绝发布。仅上传固定附件，不递归发布整个工作区或构建目录。
 
@@ -40,3 +41,5 @@
 稳定版仍需完成 [#4](https://github.com/HoboCY/AgentDock/issues/4)、[#9](https://github.com/HoboCY/AgentDock/issues/9)、[#10](https://github.com/HoboCY/AgentDock/issues/10)、[#12](https://github.com/HoboCY/AgentDock/issues/12) 中的严格冷启动、Mac 原生交互/可访问性、当前安装版真实负载和发行交付检查；其中 Windows 签名及真实下载后的 SmartScreen、Mac Developer ID/公证/Gatekeeper 尚未完成。当前构建器始终保守标记 `releaseReady=false`。
 
 测试版须从 Releases 页面手动获取；应用内更新查询使用 GitHub 的稳定版 `releases/latest`，不会提示预发布更新。
+
+签名身份准备与保管见 [发行签名准备](signing.md)。未具备身份和同一候选的验收证据前，不开放稳定标签或修改 `releaseReady`。

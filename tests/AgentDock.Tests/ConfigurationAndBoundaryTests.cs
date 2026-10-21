@@ -65,6 +65,34 @@ public sealed class ConfigurationAndBoundaryTests : IDisposable
         Assert.Equal("invalid state", File.ReadAllText(file));
     }
 
+    [WindowsOwnershipFact]
+    public async Task StartupWaitsForBriefWindowsOwnershipConflict()
+    {
+        var home = Path.Combine(root, "brief-lock");
+        Directory.CreateDirectory(home);
+        using var held = new FileStream(Path.Combine(home, "owner.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        using var release = new ManualResetEventSlim();
+        var releaser = new Thread(() => { release.Wait(); Thread.Sleep(100); held.Dispose(); });
+        releaser.Start();
+        try
+        {
+            release.Set();
+            await using var service = new TaskService(home, new BlockingEngine());
+            Assert.Empty(service.List());
+            Assert.True(File.Exists(Path.Combine(home, "tasks.json")));
+        }
+        finally { release.Set(); releaser.Join(); }
+    }
+
+    [Fact]
+    public void InvalidOwnershipPathDoesNotCreateTaskState()
+    {
+        var home = Path.Combine(root, "invalid-lock");
+        Directory.CreateDirectory(Path.Combine(home, "owner.lock"));
+        Assert.Throws<UnauthorizedAccessException>(() => new TaskService(home, new BlockingEngine()));
+        Assert.False(File.Exists(Path.Combine(home, "tasks.json")));
+    }
+
     [Fact]
     public void PathComparisonIncludesParentChildButNotPrefixSiblings()
     {
@@ -115,5 +143,13 @@ public sealed class MacPathFactAttribute : FactAttribute
     public MacPathFactAttribute()
     {
         if (!OperatingSystem.IsMacOS()) Skip = "Requires real macOS path identity semantics.";
+    }
+}
+
+public sealed class WindowsOwnershipFactAttribute : FactAttribute
+{
+    public WindowsOwnershipFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Requires Windows sharing-violation semantics.";
     }
 }

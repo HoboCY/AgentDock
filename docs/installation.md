@@ -11,15 +11,16 @@
 | Git | **无需预装**：安装包内置官方 MinGit（Git for Windows 最小分发，含 GNU Bash），Host 默认使用 `engines/git/usr/bin/sh.exe` 作为 shell |
 | 开发环境 | **不需要**用户自行安装 Python、Node、.NET 或 Git；所需运行时与依赖均随包分发 |
 
-安装包由两个文件组成，请放在同一目录：
+从新版 Release 下载一个文件即可：
 
-- `AgentDockSetup-<版本>-win-x64.exe`：安装程序（图形界面 + 命令行）。
-- `AgentDock-<版本>-win-x64.zip`：payload（桌面程序、后台 Host、执行引擎、固定运行时、插件源）。
+- `AgentDockSetup-<版本>-win-x64.exe`：内置桌面程序、后台 Host、执行引擎、固定运行时与插件源的完整安装程序。
+
+无需另行下载、解压或复制 payload，也不需要处理 `package-manifest.json` 或 `SHA256SUMS.txt`；它们是可选的构建与校验资料。旧版 `0.1.1-beta.1` 仍是 EXE + ZIP 分体包，需要按该版本的 Release 说明下载两个文件。
 
 ## 二、安装
 
-1. 双击 `AgentDockSetup-<版本>-win-x64.exe`（未签名版本可能触发 SmartScreen 提示）。
-2. 安装程序自动完成：校验 payload 每个文件的 SHA-256 → 解包到版本目录 → 写入当前版本指针 → 刷新插件源 → 创建稳定启动器、开始菜单快捷方式与“应用和功能”卸载入口。
+1. 双击 `AgentDockSetup-<版本>-win-x64.exe`，点击「安装 / 应用更新」（未签名版本可能触发 SmartScreen 提示）。
+2. 安装程序自动校验内置程序包、安装文件、刷新插件源并创建启动和卸载入口。日常启动使用精简启动器，不携带整份分发包。
 3. 安装位置（每用户）：
 
 ```

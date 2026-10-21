@@ -22,7 +22,7 @@ public sealed class TaskService : IAsyncDisposable
         this.engine = engine;
         this.clock = clock ?? TimeProvider.System;
         file = Path.Combine(home, "tasks.json");
-        ownership = new FileStream(Path.Combine(home, "owner.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        ownership = AcquireOwnership(Path.Combine(home, "owner.lock"));
         try
         {
             state = AtomicJson.Read<ServiceState>(file);
@@ -48,6 +48,19 @@ public sealed class TaskService : IAsyncDisposable
             Save();
         }
         catch { ownership.Dispose(); throw; }
+    }
+
+    private static FileStream AcquireOwnership(string path)
+    {
+        var deadline = Environment.TickCount64 + 500;
+        while (true)
+        {
+            try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            // 仅容忍 Windows 短暂共享冲突；持续占用仍拒绝第二个 owner。
+            catch (IOException error) when (OperatingSystem.IsWindows() &&
+                (error.HResult & 0xffff) == 32 && Environment.TickCount64 < deadline)
+            { Thread.Sleep(25); }
+        }
     }
 
     public DockConfiguration Configuration

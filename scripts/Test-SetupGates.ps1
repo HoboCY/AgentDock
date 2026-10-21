@@ -23,6 +23,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$SetupExe,
+    [string]$BundledSetupExe,
     [string]$Payload,
     [string]$HostExe,
     [string]$WorkDir,
@@ -83,9 +84,9 @@ function Assert-InWorkDir([string]$Path) {
 }
 
 function Invoke-Setup {
-    param([string[]]$Arguments, [int]$TimeoutSeconds = 240)
+    param([string[]]$Arguments, [int]$TimeoutSeconds = 240, [string]$Executable = $script:SetupPath)
     $start = [System.Diagnostics.ProcessStartInfo]::new()
-    $start.FileName = $script:SetupPath
+    $start.FileName = $Executable
     foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
@@ -435,8 +436,12 @@ Invoke-Case 'partial-payload-is-rejected' {
     $value = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
     $value.partial = $true
     $value | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifest
-    Assert-True ((Invoke-Setup (Install-Args -Root $root -PayloadPath $payload)).ExitCode -ne 0) '不完整包不得安装'
+    $result = Invoke-Setup (Install-Args -Root $root -PayloadPath $payload)
+    Assert-True ($result.ExitCode -ne 0) '不完整包不得安装'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'install/current.json'))) '不完整包不得发布版本指针'
+    Assert-True ($result.StdErr.Contains('此安装包不完整（partial）')) 'stderr 必须保留具体拒绝原因'
+    $log = Get-Content -Raw -LiteralPath (Join-Path $root 'install/setup.log')
+    Assert-True ($log.Contains('此安装包不完整（partial）')) '进入门禁前的安装失败原因必须落盘'
 }
 
 Invoke-Case 'corrupt-update-keeps-current-version' {
@@ -444,9 +449,86 @@ Invoke-Case 'corrupt-update-keeps-current-version' {
     $first = New-SyntheticPayload (Join-Path $WorkDir 'corrupt-first') '0.0.1-test'
     $next = New-SyntheticPayload (Join-Path $WorkDir 'corrupt-next') '0.0.2-test'
     Assert-True ((Invoke-Setup (Install-Args -Root $root -PayloadPath $first)).ExitCode -eq 0) '初始安装失败'
+    $currentPath = Join-Path $root 'install/current.json'
+    $configPath = Join-Path $root 'data/config.json'
+    Set-Content -LiteralPath $configPath -Value '{"acceptanceFixture":true}' -Encoding utf8
+    $currentHash = (Get-FileHash -LiteralPath $currentPath).Hash
+    $configHash = (Get-FileHash -LiteralPath $configPath).Hash
     Set-Content -LiteralPath (Join-Path $next 'host/AgentDock.Host.exe') -Value 'corrupted'
-    Assert-True ((Invoke-Setup @('--apply-update','--payload',$next,'--root',$root,'--silent','--no-shell-integration')).ExitCode -ne 0) '损坏更新必须失败'
-    Assert-True ((Get-Content -Raw -LiteralPath (Join-Path $root 'install/current.json') | ConvertFrom-Json).version -eq '0.0.1-test') '失败后版本指针必须保留'
+    $result = Invoke-Setup @('--apply-update','--payload',$next,'--root',$root,'--silent','--no-shell-integration')
+    Assert-True ($result.ExitCode -ne 0) '损坏更新必须失败'
+    Assert-True ((Get-FileHash -LiteralPath $currentPath).Hash -eq $currentHash) '失败后版本指针必须保留'
+    Assert-True ((Get-FileHash -LiteralPath $configPath).Hash -eq $configHash) '失败后用户配置必须保留'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'install/update.lock'))) '失败后必须释放本次更新标记'
+    $reason = 'payload 文件体积不符：host/AgentDock.Host.exe'
+    Assert-True ($result.StdErr.Contains($reason)) 'stderr 必须保留具体错误原因'
+    $log = Get-Content -Raw -LiteralPath (Join-Path $root 'install/setup.log')
+    Assert-True ($log.Contains($reason)) '损坏更新的具体错误原因必须落盘'
+}
+
+if ($BundledSetupExe) {
+    if (-not $script:PayloadPath) { throw '单文件安装验收需要 -Payload 对照版本。' }
+    $standalone = New-Root 'standalone-download'
+    $bundle = Join-Path $standalone 'AgentDockSetup.exe'
+    Copy-Item -LiteralPath (Resolve-Path -LiteralPath $BundledSetupExe).Path -Destination $bundle
+    $bundleRoot = New-Root 'bundled-install'
+    $bundleData = Join-Path $bundleRoot 'data/keep.me'
+    Invoke-Case 'bundled-exe-alone-installs-with-lean-launcher' {
+        Assert-True (@(Get-ChildItem -LiteralPath $standalone -File).Count -eq 1) '下载目录应只有一个 EXE'
+        $statusPath = Join-Path $WorkDir 'bundled-status.json'
+        $status = Invoke-Setup @('--status', '--root', $bundleRoot, '--out', $statusPath) -Executable $bundle
+        Assert-True ($status.ExitCode -eq 0) "读取内置包失败：$($status.StdErr)"
+        $view = Get-Content -Raw -LiteralPath $statusPath | ConvertFrom-Json
+        Assert-True ($view.bundledPayload -and $view.payloadVersion -eq $script:ExpectedVersion) '内置包版本必须与构建清单一致'
+        $installed = Invoke-Setup @('--install', '--silent', '--no-shell-integration', '--root', $bundleRoot) -Executable $bundle
+        Assert-True ($installed.ExitCode -eq 0) "单独 EXE 安装失败：$($installed.StdErr)"
+        $current = Get-Content -Raw -LiteralPath (Join-Path $bundleRoot 'install/current.json') | ConvertFrom-Json
+        Assert-True ($current.version -eq $script:ExpectedVersion) '安装了错误版本'
+        $launcher = Join-Path $bundleRoot 'AgentDock.exe'
+        $expectedLauncher = Join-Path $current.root 'setup/AgentDock.Setup.exe'
+        Assert-True ((Get-FileHash -LiteralPath $launcher).Hash -eq (Get-FileHash -LiteralPath $expectedLauncher).Hash) '稳定启动器必须来自已校验的内置精简程序'
+        Assert-True ((Get-Item -LiteralPath $launcher).Length -lt (Get-Item -LiteralPath $bundle).Length) '启动器不应携带整份分发包'
+        $thinStatus = Invoke-Setup @('--status', '--root', $bundleRoot, '--out', $statusPath) -Executable $launcher
+        Assert-True ($thinStatus.ExitCode -eq 0) '安装后的启动器不能运行'
+        Assert-True (-not (Get-Content -Raw -LiteralPath $statusPath | ConvertFrom-Json).bundledPayload) '精简启动器不应内嵌 payload'
+        Set-Content -LiteralPath $bundleData -Value 'user data stays'
+    }
+    Invoke-Case 'bundled-repair-ignores-nearby-payload' {
+        Set-Content -LiteralPath (Join-Path $standalone 'payload.zip') -Value 'wrong or incomplete nearby download'
+        $before = (Get-FileHash -LiteralPath $bundleData).Hash
+        $repair = Invoke-Setup @('--install', '--silent', '--no-shell-integration', '--root', $bundleRoot) -Executable $bundle
+        Assert-True ($repair.ExitCode -eq 0) "修复不应读取旁边的 ZIP：$($repair.StdErr)"
+        Assert-True ((Get-FileHash -LiteralPath $bundleData).Hash -eq $before) '修复不得改动用户数据'
+    }
+    Invoke-Case 'bundled-update-is-gated-and-keeps-data' {
+        $root = New-Root 'bundled-update'
+        $first = Invoke-Setup (Install-Args -Root $root)
+        Assert-True ($first.ExitCode -eq 0) "准备旧版失败：$($first.StdErr)"
+        $config = Join-Path $root 'data/config.json'
+        Set-Content -LiteralPath $config -Value '{"acceptanceFixture":true}'
+        $before = (Get-FileHash -LiteralPath $config).Hash
+        $state = Join-Path $root 'data/tasks.json'
+        Set-Content -LiteralPath $state -Value '{"schema":1,"tasks":{"t1":{"id":"t1","status":"Paused"}},"requests":{}}'
+        $arguments = @('--apply-update', '--silent', '--no-shell-integration', '--root', $root)
+        $blocked = Invoke-Setup $arguments -Executable $bundle
+        Assert-True ($blocked.ExitCode -ne 0) '内置包更新必须拒绝未完成任务'
+        Assert-True ($blocked.StdErr -match '排队|运行|暂停|未完成') '更新必须因任务门禁拒绝，而非参数或包解析错误'
+        $pointer = Join-Path $root 'install/current.json'
+        Assert-True ((Get-Content -Raw -LiteralPath $pointer | ConvertFrom-Json).version -eq '0.1.0-gate-a') '被拒绝的更新不得切换版本'
+        Set-Content -LiteralPath $state -Value '{"schema":1,"tasks":{},"requests":{}}'
+        $updated = Invoke-Setup $arguments -Executable $bundle
+        Assert-True ($updated.ExitCode -eq 0) "内置包更新失败：$($updated.StdErr)"
+        Assert-True ((Get-Content -Raw -LiteralPath $pointer | ConvertFrom-Json).version -eq $script:ExpectedVersion) '更新未切换到内置版本'
+        Assert-True ((Get-FileHash -LiteralPath $config).Hash -eq $before) '更新不得改动用户配置'
+        Assert-True (Test-Path -LiteralPath (Join-Path $root 'install/0.1.0-gate-a')) '更新应保留旧版本'
+    }
+    Invoke-Case 'bundled-uninstall-keeps-data' {
+        $before = (Get-FileHash -LiteralPath $bundleData).Hash
+        $removed = Invoke-Setup @('--uninstall', '--silent', '--no-shell-integration', '--root', $bundleRoot) -Executable $bundle
+        Assert-True ($removed.ExitCode -eq 0) "单文件安装器卸载失败：$($removed.StdErr)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $bundleRoot 'install'))) '程序文件未删除'
+        Assert-True ((Get-FileHash -LiteralPath $bundleData).Hash -eq $before) '卸载不得删除用户数据'
+    }
 }
 
 Write-Host ''

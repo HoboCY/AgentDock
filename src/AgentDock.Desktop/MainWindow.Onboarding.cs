@@ -17,7 +17,7 @@ public sealed partial class MainWindow
     private RoutingStatus? _routingStatus;
     private readonly TextBlock _setupError = new() { TextWrapping = TextWrapping.Wrap, Foreground = Ui.Brush("#B3261E"), IsVisible = false };
     private readonly TextBox _setupKey = new() { PasswordChar = '●', Watermark = "粘贴 OpenCode Go API Key", MaxWidth = 540, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly StackPanel _setupBody = new() { Spacing = 18 };
+    private readonly StackPanel _setupBody = new() { Spacing = 10 };
     private readonly TextBlock[] _stepStates = Enumerable.Range(0, 4).Select(_ => Hint("待配置")).ToArray();
     private readonly Button[] _stepButtons = new Button[4];
     private readonly Button _setupNext = Ui.Button("启动后台", "Primary");
@@ -56,9 +56,8 @@ public sealed partial class MainWindow
         }
         var body = new StackPanel
         {
-            Spacing = 24, Margin = new Thickness(32, 28), MaxWidth = 860, HorizontalAlignment = HorizontalAlignment.Stretch,
-            Children = { Hint("欢迎使用 AgentDock"), Ui.Text("把第一次配置，一步步完成", "pageTitle"),
-                Hint("完成后，Codex 可把合适的子任务交给 AgentDock。已有配置会保留，随时可以回来继续。"),
+            Spacing = 12, Margin = new Thickness(14, 12), MaxWidth = 860, HorizontalAlignment = HorizontalAlignment.Stretch,
+            Children = { Ui.Text("开始使用", "pageTitle"),
                 steps, Divider(), _setupProgress, _setupBody, _setupError }
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { _setupBack, _setupNext } };
@@ -67,7 +66,7 @@ public sealed partial class MainWindow
         Put(footer, buttons, 0, 1);
         var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
         Put(root, new ScrollViewer { Content = body }, 0);
-        Put(root, new Border { Background = Brushes.White, BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(24, 14), Child = footer }, 1);
+        Put(root, new Border { Background = Brushes.White, BorderBrush = Ui.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(14, 8), Child = footer }, 1);
         RenderSetup();
         return root;
     }

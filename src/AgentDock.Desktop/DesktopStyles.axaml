@@ -23,7 +23,7 @@
     <Setter Property="FontSize" Value="13" />
   </Style>
   <Style Selector="TextBlock.pageTitle">
-    <Setter Property="FontSize" Value="30" />
+    <Setter Property="FontSize" Value="20" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="#20312C" />
   </Style>
@@ -33,13 +33,8 @@
     <Setter Property="TextWrapping" Value="Wrap" />
     <Setter Property="LineHeight" Value="19" />
   </Style>
-  <Style Selector="TextBlock.metric">
-    <Setter Property="FontSize" Value="27" />
-    <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Foreground" Value="#20312C" />
-  </Style>
   <Style Selector="TextBlock.sectionTitle">
-    <Setter Property="FontSize" Value="21" />
+    <Setter Property="FontSize" Value="17" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="#20312C" />
     <Setter Property="TextWrapping" Value="Wrap" />
@@ -52,12 +47,15 @@
     <Setter Property="BorderBrush" Value="#49947F" />
     <Setter Property="BorderThickness" Value="2" />
   </Style>
-  <Style Selector="Button.sidebarAction">
+  <Style Selector=":is(Window).toolWindow Button">
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Padding" Value="10,6" />
+  </Style>
+  <Style Selector="Button.utilityAction">
     <Setter Property="Foreground" Value="#D7E7E1" />
-    <Setter Property="Padding" Value="12,9" />
     <Setter Property="FontSize" Value="12" />
   </Style>
-  <Style Selector="Button.sidebarAction:pointerover">
+  <Style Selector="Button.utilityAction:pointerover">
     <Setter Property="Background" Value="#2B4840" />
     <Setter Property="Foreground" Value="White" />
   </Style>
@@ -65,19 +63,21 @@
     <Setter Property="Foreground" Value="#AB4338" />
     <Setter Property="BorderBrush" Value="#DEC2BB" />
   </Style>
-  <!-- Keep TabItem selection, keyboard and UIA semantics in the sidebar. -->
+  <!-- Keep TabItem selection, keyboard and UIA semantics in compact navigation. -->
   <Style Selector="TabControl.workspace">
     <Setter Property="Padding" Value="0" />
-    <Setter Property="TabStripPlacement" Value="Left" />
+    <Setter Property="TabStripPlacement" Value="Top" />
     <Setter Property="ItemsPanel">
-      <ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
+      <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
     </Setter>
     <Setter Property="Template">
       <ControlTemplate>
-        <Grid ColumnDefinitions="200,*">
-          <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
-                          VerticalAlignment="Top" Margin="12,116,12,0" />
-          <ContentPresenter Grid.Column="1" Name="PART_SelectedContentHost"
+        <Grid RowDefinitions="Auto,*">
+          <Border BorderBrush="#DEE6E1" BorderThickness="0,0,0,1" Background="White">
+            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"
+                            HorizontalAlignment="Left" Margin="14,4" />
+          </Border>
+          <ContentPresenter Grid.Row="1" Name="PART_SelectedContentHost"
                             Content="{TemplateBinding SelectedContent}"
                             ContentTemplate="{TemplateBinding SelectedContentTemplate}"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
@@ -86,9 +86,9 @@
     </Setter>
   </Style>
   <Style Selector="TabControl.workspace TabItem">
-    <Setter Property="Foreground" Value="#C5D8D0" />
+    <Setter Property="Foreground" Value="#697A73" />
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="Padding" Value="16,13" />
+    <Setter Property="Padding" Value="12,8" />
     <Setter Property="HorizontalContentAlignment" Value="Left" />
     <Setter Property="Template">
       <ControlTemplate>
@@ -102,11 +102,11 @@
     </Setter>
   </Style>
   <Style Selector="TabControl.workspace TabItem:pointerover">
-    <Setter Property="Background" Value="#28423B" />
+    <Setter Property="Background" Value="#EFF5F1" />
   </Style>
   <Style Selector="TabControl.workspace TabItem:selected">
-    <Setter Property="Background" Value="#2D5147" />
-    <Setter Property="Foreground" Value="White" />
+    <Setter Property="Background" Value="#E7F1EB" />
+    <Setter Property="Foreground" Value="#256D60" />
   </Style>
   <Style Selector="TabControl.workspace TabItem:focus-visible">
     <Setter Property="BorderBrush" Value="#81BAA7" />
@@ -123,8 +123,8 @@
   </Style>
   <Style Selector="ListBox.taskTable ListBoxItem">
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    <Setter Property="Padding" Value="16,12" />
-    <Setter Property="Margin" Value="0,0,0,7" />
+    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="Margin" Value="0,0,0,5" />
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="#E3EAE5" />

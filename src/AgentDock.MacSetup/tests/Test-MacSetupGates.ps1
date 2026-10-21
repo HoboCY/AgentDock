@@ -271,6 +271,36 @@ Invoke-Case 'apply-update-keeps-old-version-and-data' {
     Assert-True (Test-Path -LiteralPath $data) '更新必须保留用户数据'
 }
 
+# ---- 4a. 损坏更新：失败原因落盘，旧 current/config 原样保留 ----
+Invoke-Case 'corrupt-update-logs-failure-and-keeps-state' {
+    $root = New-Root 'corrupt-update'
+    $install = Invoke-Setup (Install-Args -Root $root -PayloadPath $script:PayloadA)
+    Assert-True ($install.ExitCode -eq 0) "初始安装失败：$($install.StdErr)"
+    $configPath = Join-Path $root 'data/config.json'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $configPath) -Force | Out-Null
+    Set-Content -LiteralPath $configPath -Value '{"acceptanceFixture":true}' -Encoding utf8
+    $currentPath = Join-Path $root 'install/current.json'
+    $currentHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $currentPath).Hash
+    $configHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $configPath).Hash
+
+    $corrupt = New-SyntheticPayload -Directory (Join-Path $WorkDir 'corrupt-update-payload') -Version '0.1.0-gate-corrupt'
+    Set-Content -LiteralPath (Join-Path $corrupt 'host/AgentDock.Host') -Value 'corrupted' -Encoding utf8 -NoNewline
+    $result = Invoke-Setup @('--apply-update', '--payload', $corrupt, '--silent', '--no-shell-integration', '--root', $root)
+    Assert-True ($result.ExitCode -ne 0) '损坏更新必须失败'
+    Assert-True ((Get-FileHash -Algorithm SHA256 -LiteralPath $currentPath).Hash -eq $currentHash) '失败后 current.json 必须保持原内容'
+    Assert-True ((Get-FileHash -Algorithm SHA256 -LiteralPath $configPath).Hash -eq $configHash) '失败后用户配置必须保持原内容'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'install/update.lock'))) '失败后应清理更新标记'
+    $reason = 'payload 文件体积不符：host/AgentDock.Host'
+    Assert-True ($result.StdErr.Contains($reason)) 'stderr 必须保留具体错误原因'
+    $logPath = Join-Path $root 'install/setup.log'
+    Assert-True (Test-Path -LiteralPath $logPath) '失败后必须留下 setup.log'
+    $log = Get-Content -Raw -LiteralPath $logPath
+    Assert-True ($log.Contains($reason)) '损坏更新的具体错误原因必须落盘'
+    Assert-True ($log.Contains('安装程序失败（ApplyUpdate）')) '失败日志必须记录更新操作名'
+    $pointer = Get-Content -Raw -LiteralPath $currentPath | ConvertFrom-Json
+    Assert-True ($pointer.version -eq '0.1.0-gate-a') '失败后版本指针必须保持旧版本'
+}
+
 # ---- 5. 未完成任务（Paused/Queued/Running）拒绝安装 ----
 foreach ($status in @('Paused', 'Queued', 'Running')) {
     Invoke-Case "unfinished-$status-blocks-install" {
@@ -315,8 +345,16 @@ Invoke-Case 'manifest-partial-rejected' {
     $manifest.partial = $true
     Save-Manifest -PayloadDirectory $payload -Manifest $manifest
     $root = New-Root 'bad-partial-root'
-    Assert-True ((Invoke-Setup (Install-Args -Root $root -PayloadPath $payload)).ExitCode -ne 0) 'partial 包必须被拒绝'
+    $result = Invoke-Setup (Install-Args -Root $root -PayloadPath $payload)
+    Assert-True ($result.ExitCode -ne 0) 'partial 包必须被拒绝'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $root 'install/current.json'))) 'partial 包不得发布指针'
+    $reason = '此安装包不完整（partial）'
+    Assert-True ($result.StdErr.Contains($reason)) 'stderr 必须保留具体拒绝原因'
+    $logPath = Join-Path $root 'install/setup.log'
+    Assert-True (Test-Path -LiteralPath $logPath) '安装前失败也必须留下 setup.log'
+    $log = Get-Content -Raw -LiteralPath $logPath
+    Assert-True ($log.Contains($reason)) '安装前失败原因必须落盘'
+    Assert-True ($log.Contains('安装程序失败（Install）')) '失败日志必须记录操作名'
 }
 
 Invoke-Case 'manifest-wrong-runtime-rejected' {

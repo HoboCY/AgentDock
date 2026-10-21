@@ -146,6 +146,9 @@ public static partial class SmokeTest
         var width = main.Width;
         var height = main.Height;
         var minimumHeight = main.MinHeight;
+        if (width > 760 || height > 560)
+            throw new InvalidOperationException("The main window must open at a small utility size.");
+        checks.Add("compact-default-window-size");
         var tabs = main.GetVisualDescendants().OfType<TabControl>().Single();
         foreach (var tab in tabs.Items.Cast<TabItem>())
             if (Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(tab)?.GetName() != tab.Header as string)
@@ -159,6 +162,8 @@ public static partial class SmokeTest
         var tasks = main.GetVisualDescendants().OfType<ListBox>().Single();
         if (tasks.ItemCount > 0)
         {
+            main.Width = 1100;
+            await Task.Delay(300);
             tasks.SelectedIndex = 0;
             await Task.Delay(150);
             CheckTaskRows(main);
@@ -171,7 +176,7 @@ public static partial class SmokeTest
                 tasks.SelectedIndex = 0;
                 await Task.Delay(150);
             }
-            Capture(main, outputPath + ".selected.png");
+            Capture(main, outputPath + ".wide.png");
             checks.Add("selection-updates-inspector");
             var filter = main.GetVisualDescendants().OfType<ComboBox>().Single(control => AutomationProperties.GetName(control) == "项目筛选");
             if (filter.ItemCount > 2)
@@ -190,10 +195,14 @@ public static partial class SmokeTest
                 await Task.Delay(150);
                 checks.Add("project-filter-updates-list-and-selection");
             }
+            main.Width = width;
+            await Task.Delay(300);
+            CheckTaskRows(main);
+            Capture(main, outputPath + ".selected.png");
         }
 
-        main.Width = Math.Min(width, 900);
-        main.Height = Math.Min(height, 600);
+        main.Width = main.MinWidth;
+        main.Height = main.MinHeight;
         await Task.Delay(350);
         Capture(main, outputPath + ".compact.png");
         CheckTaskRows(main);
@@ -203,7 +212,7 @@ public static partial class SmokeTest
         {
             var button = main.GetVisualDescendants().OfType<Button>().Single(control => Equals(control.Content, label) && control.IsEffectivelyVisible);
             var point = button.TranslatePoint(default, main);
-            if (point is not { } p || p.X < 200 || p.X + button.Bounds.Width > main.Bounds.Width || p.Y + button.Bounds.Height > main.Bounds.Height)
+            if (point is not { } p || p.X < 0 || p.X + button.Bounds.Width > main.Bounds.Width || p.Y + button.Bounds.Height > main.Bounds.Height)
                 throw new InvalidOperationException("Compact task actions must remain inside the workspace.");
         }
         checks.Add("compact-inspector-collapsed-actions-visible");
@@ -241,14 +250,15 @@ public static partial class SmokeTest
             throw new InvalidOperationException("Collapsed settings groups must release their editor height.");
         checks.Add("collapsed-settings-release-space");
 
-        main.Width = Math.Min(width, 900);
-        main.Height = Math.Min(height, 600);
+        main.Width = main.MinWidth;
+        main.Height = main.MinHeight;
         var settingsScroll = main.GetVisualDescendants().OfType<ScrollViewer>().First(viewer => viewer.Content is StackPanel);
         settingsScroll.Offset = default;
         await Task.Delay(500);
         var save = main.GetVisualDescendants().OfType<Button>().Single(button => Equals(button.Content, "保存配置"));
         var savePosition = save.TranslatePoint(default, main);
-        if (savePosition is not { } position || position.Y + save.Bounds.Height > main.Bounds.Height || position.X < 0)
+        if (!save.IsEffectivelyVisible || savePosition is not { } position || position.Y < 0 ||
+            position.Y + save.Bounds.Height > main.Bounds.Height || position.X < 0 || position.X + save.Bounds.Width > main.Bounds.Width)
             throw new InvalidOperationException("Save configuration must stay visible at the compact window size.");
         Capture(main, outputPath + ".settings-compact.png");
         checks.Add("compact-settings-save-visible");
@@ -262,13 +272,19 @@ public static partial class SmokeTest
         foreach (var (name, card) in new[] { ("OpenCode Go 凭据", "CredentialSettings"), ("全局并发上限", "ConcurrencySettings") })
         {
             var editor = main.GetVisualDescendants().OfType<Control>().First(control => AutomationProperties.GetName(control) == name);
-            if (Bottom(editor) > Bottom(sections[card]) - 16)
+            if (Bottom(editor) > Bottom(sections[card]) - 12)
                 throw new InvalidOperationException($"Settings editor {name} is clipped by its card.");
         }
         checks.Add("compact-settings-sections-do-not-overlap");
-        main.Width = width;
+        main.Width = 1100;
         main.Height = height;
         tabs.SelectedIndex = 0;
+        await Task.Delay(300);
+        if (!inspector.IsVisible) throw new InvalidOperationException("Enlarging the window must restore task details.");
+        CheckTaskRows(main);
+        checks.Add("enlarged-window-restores-inspector");
+        main.Width = width;
+        await Task.Delay(300);
 
         if (app.State.Tasks.FirstOrDefault() is { } task)
         {
@@ -293,7 +309,7 @@ public static partial class SmokeTest
         foreach (var row in window.GetVisualDescendants().OfType<Grid>().Where(grid => grid.Name == "TaskDataRow"))
         {
             var point = row.TranslatePoint(default, window);
-            if (row.Bounds.Height < 48 || point is not { } p || p.X < 200 || p.X + row.Bounds.Width > window.Bounds.Width)
+            if (row.Bounds.Height < 48 || point is not { } p || p.X < 0 || p.X + row.Bounds.Width > window.Bounds.Width)
                 throw new InvalidOperationException("Two-line task cards must fit within the workspace.");
         }
     }

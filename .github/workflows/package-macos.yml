@@ -1,0 +1,96 @@
+name: package-macos
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Mac 候选版本（留空使用 CI 版本；标签运行时必须一致）'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS arm64 原生候选（未签名）
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      VERSION_INPUT: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 校验版本与原生架构
+        id: version
+        run: |
+          test "$(uname -m)" = arm64
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          version = os.environ['VERSION_INPUT'] or '0.0.0-ci.' + os.environ['GITHUB_RUN_NUMBER']
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              version = os.environ['GITHUB_REF_NAME'].removeprefix('v')
+              if os.environ['VERSION_INPUT'] and os.environ['VERSION_INPUT'] != version:
+                  raise SystemExit('Input version does not match tag')
+          if not re.fullmatch(r'\d+\.\d+\.\d+-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*', version):
+              raise SystemExit('Only prerelease candidates are supported')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('VERSION=' + version + '\n')
+          lock = json.loads(Path('packaging/mac/runtime-lock.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sdk=' + lock['dotnet']['sdk'] + '\n')
+          PY
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ steps.version.outputs.sdk }}
+      - name: 获取并校验固定运行时
+        run: |
+          python3 scripts/Test-MacRuntimeFetch.py
+          python3 scripts/Fetch-MacRuntimes.py "$RUNNER_TEMP/mac-runtimes"
+          bash scripts/Build-MacGit.sh "$RUNNER_TEMP/mac-git"
+          python3 scripts/Prepare-MacGit.py "$RUNNER_TEMP/mac-git"
+      - name: 原生回归
+        env:
+          AGENTDOCK_TEST_SANDBOX: ${{ runner.temp }}/mac-runtimes/codex/bin/codex
+          AGENTDOCK_TEST_OPENCODE: ${{ runner.temp }}/mac-runtimes/opencode/bin/opencode
+          AGENTDOCK_MAC_EXECUTION_TESTS: '1'
+        run: |
+          dotnet test tests/AgentDock.Tests/AgentDock.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
+          dotnet test tests/AgentDock.Engine.Tests/AgentDock.Engine.Tests.csproj -c Release -m:1 --disable-build-servers --logger trx --results-directory artifacts/mac-tests
+      - name: 构建完整 APP 与 DMG
+        run: |
+          python3 scripts/Build-MacPackage.py --version "$VERSION" --output-dir "$GITHUB_WORKSPACE/artifacts/mac-package" \
+            --opencode-root "$RUNNER_TEMP/mac-runtimes/opencode" --opencode-archive "$RUNNER_TEMP/mac-runtimes/opencode.tgz" \
+            --codex-root "$RUNNER_TEMP/mac-runtimes/codex" --codex-archive "$RUNNER_TEMP/mac-runtimes/codex.tgz" \
+            --git-root "$RUNNER_TEMP/mac-git/portable"
+      - name: 原生安装门禁
+        run: |
+          python3 scripts/Test-MacSetupGates.py \
+            --setup "$GITHUB_WORKSPACE/artifacts/mac-package/AgentDockSetup-$VERSION-macos-arm64.app/Contents/MacOS/AgentDock" \
+            --work "$RUNNER_TEMP/mac-setup-gates"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentdock-macos-arm64-UNSIGNED-${{ github.run_number }}
+          path: |
+            artifacts/mac-package/*.dmg
+            artifacts/mac-package/*.json
+            artifacts/mac-package/*.txt
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-validation-${{ github.run_number }}
+          path: |
+            artifacts/mac-tests/*.trx
+            ${{ runner.temp }}/mac-setup-gates/results.json
+            ${{ runner.temp }}/mac-git/build.log
+          if-no-files-found: warn

@@ -72,8 +72,8 @@ public sealed class CodexIntegration
     }
 
     private static bool SamePath(string left, string right) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left.StartsWith(@"\\?\", StringComparison.Ordinal) ? left[4..] : left)),
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        string.Equals(ProjectPaths.Canonicalize(left.StartsWith(@"\\?\", StringComparison.Ordinal) ? left[4..] : left),
+            ProjectPaths.Canonicalize(right), ProjectPaths.Comparison);
 
     internal ProcessStartInfo CreateStartInfo(IEnumerable<string> arguments)
     {

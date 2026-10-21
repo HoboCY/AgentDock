@@ -75,6 +75,7 @@ internal static class Cli
             return 2;
         }
 
+        InstallLayout? layout = null;
         try
         {
             // 非 macOS 只允许在隔离 --root 上做载荷/门禁检查，禁止触碰真实安装根或系统集成。
@@ -87,7 +88,7 @@ internal static class Cli
             // 稳定启动器未显式 --root 时：所属 <root>/AgentDock.app 的父目录带 install/current.json 即视为安装根；
             // 安装器（双击）场景没有该指针，仍使用默认根。
             var root = options.Root ?? MacPaths.InferRootFromBundle();
-            var layout = InstallLayout.Resolve(root);
+            layout = InstallLayout.Resolve(root);
             switch (options.Mode)
             {
                 case MacSetupMode.Help:
@@ -123,6 +124,8 @@ internal static class Cli
         }
         catch (Exception ex)
         {
+            if (options.Mode is MacSetupMode.Install or MacSetupMode.ApplyUpdate or MacSetupMode.Gui)
+                layout?.Log($"安装程序失败（{options.Mode}）：{ex.Message}");
             if (options.Mode == MacSetupMode.Gui && OperatingSystem.IsMacOS())
             {
                 try

@@ -30,11 +30,7 @@ public sealed partial class MainWindow : ShadUI.Window
     private readonly Button _refreshButton;
     private readonly ComboBox _projectFilter = new() { MinWidth = 160, MaxWidth = 230 };
     private readonly TextBlock _countText = new() { VerticalAlignment = VerticalAlignment.Center, Opacity = .75, FontSize = 12.5 };
-    private readonly TextBlock _activeMetric = Ui.Text("0", "metric");
-    private readonly TextBlock _inputMetric = Ui.Text("待更新", "metric");
-    private readonly TextBlock _outputMetric = Ui.Text("待更新", "metric");
     private readonly TextBlock _compactMetrics = Ui.Text("", "muted");
-    private Control _metricCard = null!;
     private readonly TextBlock _emptyTitle = new() { FontSize = 16, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TextBlock _emptyDescription = new() { Classes = { "muted" }, TextAlignment = TextAlignment.Center, MaxWidth = 420 };
     private readonly StackPanel _emptyTasks = new() { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24), IsHitTestVisible = false };
@@ -72,10 +68,11 @@ public sealed partial class MainWindow : ShadUI.Window
         InitializeOnboarding();
         Title = "AgentDock";
         Icon = Icons.Create();
-        Width = 1280;
-        Height = 820;
-        MinWidth = 900;
-        MinHeight = 600;
+        Width = 760;
+        Height = 560;
+        MinWidth = 640;
+        MinHeight = 480;
+        Classes.Add("toolWindow");
         Background = Ui.Canvas;
         Ui.ConfigureWindow(this);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -189,15 +186,12 @@ public sealed partial class MainWindow : ShadUI.Window
         _taskList.ItemsSource = tasks;
         _taskList.SelectedItem = tasks.FirstOrDefault(t => t.Id == selectedId) ?? tasks.FirstOrDefault();
         _countText.Text = filter is null || filter == AllProjects ? $"共 {tasks.Length} 项" : $"筛选 {tasks.Length} / {_state.Tasks.Length} 项";
-        _activeMetric.Text = tasks.Count(t => t.Status.IsUnfinished()).ToString(CultureInfo.CurrentCulture);
-        SetUsageMetric(_inputMetric, _inputMetricNote, tasks.Select(t => t.InputTokens));
-        SetUsageMetric(_outputMetric, _outputMetricNote, tasks.Select(t => t.OutputTokens));
-        _compactMetrics.Text = $"活跃 {_activeMetric.Text} 项   ·   输入 {Fmt.Total(tasks.Select(t => t.InputTokens))}   ·   输出 {Fmt.Total(tasks.Select(t => t.OutputTokens))}";
+        _compactMetrics.Text = $"活跃 {tasks.Count(t => t.Status.IsUnfinished())} 项   ·   输入 {Fmt.Total(tasks.Select(t => t.InputTokens))}   ·   输出 {Fmt.Total(tasks.Select(t => t.OutputTokens))}";
         _emptyTasks.IsVisible = tasks.Length == 0;
         _emptyTitle.Text = _state.HostReachable ? "准备好接收任务" : "连接后台以查看任务";
         _emptyDescription.Text = _state.HostReachable
             ? "由 Codex 派发的子代理任务会显示在这里。你可以按项目筛选、查看结果或停止任务。"
-            : "点击左下方「启动后台」。连接恢复后，已有任务会自动显示。";
+            : "点击底部「启动后台」。连接恢复后，已有任务会自动显示。";
         UpdateSelection();
     }
 
@@ -211,18 +205,15 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private void UpdateDensity()
     {
-        var compact = Bounds.Height < 660;
-        _metricCard.IsVisible = !compact;
-        _compactMetrics.IsVisible = compact;
-        var narrow = Bounds.Width < 1140;
+        var narrow = Bounds.Width < 1000;
         _inspector.IsVisible = !narrow;
         _taskWorkspace.ColumnDefinitions[1].Width = new GridLength(narrow ? 0 : 280);
         _compactActions.IsVisible = narrow;
-        _taskHeading.IsVisible = Bounds.Height >= 560;
-        _settingsConnections.Columns = narrow ? 1 : 2;
-        _settingsConnections.Rows = narrow ? 2 : 1;
-        _credentialCard.Margin = narrow ? new Thickness(0, 0, 0, 8) : new Thickness(0, 0, 8, 0);
-        _concurrencyCard.Margin = narrow ? new Thickness(0, 8, 0, 0) : new Thickness(8, 0, 0, 0);
+        var stackedSettings = Bounds.Width < 720;
+        _settingsConnections.Columns = stackedSettings ? 1 : 2;
+        _settingsConnections.Rows = stackedSettings ? 2 : 1;
+        _credentialCard.Margin = stackedSettings ? new Thickness(0, 0, 0, 6) : new Thickness(0, 0, 6, 0);
+        _concurrencyCard.Margin = stackedSettings ? new Thickness(0, 6, 0, 0) : new Thickness(6, 0, 0, 0);
     }
 
     private Control BuildCredentialRow()
@@ -555,9 +546,9 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private static Control Section(string title, Control content) => Ui.Card(new StackPanel
     {
-        Spacing = 14,
+        Spacing = 10,
         Children = { new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, FontSize = 15, Foreground = Ui.Ink }, content }
-    });
+    }, new Thickness(14));
 
     private static Control ExpanderSection(string title, Control content)
     {
@@ -570,7 +561,7 @@ public sealed partial class MainWindow : ShadUI.Window
             IsExpanded = false
         };
         AutomationProperties.SetName(expander, title);
-        var card = Ui.Card(expander, new Thickness(20, 12));
+        var card = Ui.Card(expander, new Thickness(14, 8));
         if (title.StartsWith("角色", StringComparison.Ordinal)) card.Name = "RoleSettings";
         return card;
     }

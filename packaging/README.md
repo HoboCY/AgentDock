@@ -33,6 +33,7 @@ packaging/
 desktop/AgentDock.Desktop.exe
 host/AgentDock.Host.exe
 engine/AgentDock.Engine.exe
+setup/AgentDock.Setup.exe              # Windows 精简启动/卸载器，不内嵌程序包
 engines/opencode/opencode.exe          # OpenCode 1.18.30（固定）
 engines/codex/...                      # Codex sandbox 0.153.4（固定）
 engines/git/...                        # MinGit 2.56.0.2 整包解包（usr/bin/sh.exe 为 Host 默认 shell）
@@ -44,6 +45,8 @@ payload-manifest.json                  # 每文件 sha256 + size；安装/更新
 ```
 
 `payload-manifest.json` 由 `scripts/Build-Package.ps1` 生成；安装程序解包时逐文件校验，拒绝清单外文件。
+
+Windows 分发 EXE 在上述 ZIP 完成后再次构建，将 ZIP 作为资源内嵌；安装时直接读取资源并复用相同校验。默认优先使用内置包，忽略下载目录的其他 ZIP；`--payload` 作为显式维护入口保留。安装后的稳定启动器复制自已校验的 `setup/AgentDock.Setup.exe`，避免日常启动携带整个分发包。`-PayloadFormat folder` 也会为完整 Windows 安装器生成所需 ZIP。
 
 ## 每用户安装布局（安装程序）
 
