@@ -43,3 +43,19 @@
 提交 `10e50b2` 的 [Windows Actions](https://github.com/HoboCY/AgentDock/actions/runs/39538318019) 通过源码回归、完整打包、清单校验及 20 项安装门禁。[Mac 首次 Actions](https://github.com/HoboCY/AgentDock/actions/runs/39538319391) 原生运行时获取成功，但 HostIntegrationTests 两项在清理阶段失败：Host 创建的合成 Keychain 项目由不同代码身份的测试进程删除时返回 OSStatus -25244。该次运行计为失败，日志/TRX 已保留。
 
 测试夹具改用系统 security 工具按唯一 service/account 删除，并断言项目不再存在；不改生产凭据权限，也不吞掉清理失败。原生 Mac 定向复验 6 通过、1 条件跳过。云端另使用临时测试钥匙串并在 always 步骤删除整个测试钥匙串，同时启用六项 Keychain 回归。
+
+## 标签构建与公开测试版
+
+最终标签 `v0.1.1-beta.2` 指向 `e4986c064df82c81fa2de564d0fc1a7fea86a879`。
+
+- [Windows 标签 Actions](https://github.com/HoboCY/AgentDock/actions/runs/39540141926)：180 通过、32 条件跳过，22 项发布检查、20 项安装门禁通过。
+- [Mac 标签 Actions](https://github.com/HoboCY/AgentDock/actions/runs/39540141902)：Host 97 通过/7 跳过；Engine 88 通过/20 跳过（含真实执行器和 6 项 Keychain）；另有 1 项启动预检、3 项下载安全测试，21 项安装门禁通过，完整 APP/DMG 构建成功。
+- Mac 第二轮云端在 Host 全通过后，执行器连续启动超时，诊断运行已取消，未计为通过。源码测试 apphost 依赖 setup-dotnet 的 SDK，而 launchd 没有继承 shell 的 DOTNET_ROOT；为临时 runner 的 launchd 配置 SDK 路径后，最终标签测试全部通过。新增阶段/用例超时和启动预检；生产自包含运行时逻辑未改。重复分支构建已取消，以同提交标签构建为准。
+- [Windows beta.2 已公开](https://github.com/HoboCY/AgentDock/releases/tag/v0.1.1-beta.2)，2026-10-21 03:52:51 UTC 发布，`draft=false`、`prerelease=true`、不设 Latest。Mac 未签名候选只保留为 Actions artifact。
+
+草稿的三个实际附件已下载，EXE 与清单的本地 SHA-256 同时匹配 SHA256SUMS 和 GitHub asset digest。仅用下载的 EXE 在 `artifacts/validation/release-readiness-20261021/github-release-install/` 完整安装成功，Host 版本为 beta.2。公开后匿名下载清单哈希一致，EXE 匿名 HEAD 返回 200，体积 594023230 字节；没有将 HEAD 检查写成匿名完整下载。
+
+公开 EXE SHA-256：`60ca7f6af037ce72efa192740e3c1a4195977ed6ce5d08f66a5d2587b0b7db8e`。
+公开清单 SHA-256：`2e028d5f56f2bb8b44683f04f7a03fb82296458e500cabf7d167eeade7601037`。
+
+详细证据：`github-release-verification.json`、`public-release-verification.json`、`windows-ci-final.log`、`mac-ci-final.log`。公开测试版没有解除本记录列出的稳定发行缺口。
