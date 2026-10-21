@@ -8,6 +8,8 @@
 
 见 [Windows 安装说明](docs/installation.md) 和 [Mac 安装说明](packaging/mac/README.md)。包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 Git；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在各设备主面板独立配置，不迁移既有 MCP 凭据或角色。
 
+维护者通过 [GitHub 预发布流程](docs/releasing.md) 生成 Windows 测试版：测试标签自动构建并生成 Release 草稿，门禁通过后可手动公开发布；当前不声明稳定发行就绪。
+
 默认全局并发 4；同项目及父子项目的写任务串行。关闭窗口不会停止任务，重连不会重跑。完全退出是独立操作。后台异常退出后，已运行任务中断，队列暂停；Codex 需明确决定后续执行。
 
 首次进入提供四步配置引导（后台、凭据、Codex 接入、全局委派），支持稍后配置和重新打开。委派规则由用户点击启用，可关闭并恢复原区块；启动时会升级已启用且恢复记录匹配的旧托管规则。派发说明从后台读取实际执行模型和推理强度。保存凭据不会发起模型请求；配置完成后重启 Codex 并新建对话。验证范围见 [首次配置引导](docs/validation/onboarding.md)。

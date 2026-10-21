@@ -4,11 +4,12 @@ name: package
 # - windows-package：测试源码并生成完整 win-x64 安装包。
 # - plugin-probe-selftest：手动触发，验证 Codex 插件接入探针链路（需要 runner 上有 Codex CLI）。
 # - macos-recipe：手动触发的 macOS 配方，产物明确标记未签名/未验证，不作为正式发布。
-# 本工作流不创建 Release、不上传密钥、不发布任何公开制品。
+# v* 测试标签在门禁通过后创建 Windows 预发布，默认保留为草稿。
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
     paths:
       - 'src/**'
       - 'tests/**'
@@ -41,13 +42,23 @@ on:
         required: false
         default: false
         type: boolean
+      release:
+        description: '创建 Windows 预发布（必须选择已有 v* 测试标签运行）'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Release 保留为草稿；关闭后公开发布测试版'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
   group: package-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 env:
   VERSION: ${{ inputs.version != '' && inputs.version || format('0.0.0-ci.{0}', github.run_number) }}
@@ -56,8 +67,34 @@ jobs:
   windows-package:
     name: Windows 安装包（win-x64）
     runs-on: windows-latest
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: 确定构建版本与发布范围
+        id: version
+        shell: pwsh
+        env:
+          CREATE_RELEASE: ${{ github.event_name == 'push' && github.ref_type == 'tag' || inputs.release }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:CREATE_RELEASE -eq 'true') {
+            if ($env:GITHUB_REF_TYPE -ne 'tag' -or $env:GITHUB_REF_NAME -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*\z') {
+              throw '当前只支持测试标签（例如 v0.1.1-beta.1），不发布稳定版或分支快照。'
+            }
+            $env:VERSION = $env:GITHUB_REF_NAME.Substring(1)
+            if ($env:INPUT_VERSION -and $env:INPUT_VERSION -cne $env:VERSION) { throw '输入版本必须与标签一致。' }
+          }
+          if ($env:VERSION -cnotmatch '^[0-9A-Za-z][0-9A-Za-z._-]*\z') { throw '版本号包含非法字符。' }
+          "VERSION=$env:VERSION" >> $env:GITHUB_ENV
+          "version=$env:VERSION" >> $env:GITHUB_OUTPUT
+          "release=$env:CREATE_RELEASE" >> $env:GITHUB_OUTPUT
+
+      - name: 发布门禁回归
+        shell: pwsh
+        run: ./scripts/Test-ReleasePackage.ps1
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -115,12 +152,63 @@ jobs:
           if (Test-Path -LiteralPath $hostExe) { $gateArgs.HostExe = $hostExe }
           & ./scripts/Test-SetupGates.ps1 @gateArgs
 
+      - name: 校验并整理 Release 附件
+        if: steps.version.outputs.release == 'true'
+        shell: pwsh
+        run: ./scripts/Prepare-Release.ps1 -Version "$env:VERSION" -PackageDir "artifacts/package/$env:VERSION/win-x64" -OutputDir artifacts/release
+
       - uses: actions/upload-artifact@v4
+        if: steps.version.outputs.release == 'true'
+        with:
+          name: agentdock-release-${{ github.run_id }}
+          path: artifacts/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: steps.version.outputs.release != 'true'
         with:
           name: agentdock-win-x64-${{ github.run_number }}
           path: artifacts/package/**
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: Windows 预发布
+    needs: windows-package
+    if: needs.windows-package.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: agentdock-release-${{ github.run_id }}
+          path: release
+
+      - name: 创建 GitHub Release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.windows-package.outputs.version }}
+          RELEASE_DRAFT: ${{ github.event_name != 'workflow_dispatch' || inputs.draft }}
+        run: |
+          sha256sum --check SHA256SUMS.txt
+          tag_sha="$(gh api "repos/$GH_REPO/commits/v$RELEASE_VERSION" --jq .sha)"
+          if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo 'Release tag moved after this build started.' >&2
+            exit 1
+          fi
+          flags=()
+          if [[ "$RELEASE_DRAFT" == "true" ]]; then flags+=(--draft); fi
+          gh release create "v$RELEASE_VERSION" \
+            "AgentDockSetup-$RELEASE_VERSION-win-x64.exe" \
+            "AgentDock-$RELEASE_VERSION-win-x64.zip" \
+            package-manifest.json SHA256SUMS.txt \
+            --verify-tag --prerelease --latest=false "${flags[@]}" \
+            --title "AgentDock $RELEASE_VERSION (Windows preview)" \
+            --notes-file release-notes.md
 
   plugin-probe-selftest:
     name: 插件探针自检
@@ -155,7 +243,7 @@ jobs:
 
   macos-recipe:
     name: macOS 配方（未签名 / 未验证，禁止作为正式发布）
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
