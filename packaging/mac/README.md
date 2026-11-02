@@ -1,5 +1,34 @@
 # macOS arm64 构建与安装
 
+## 用户安装教程
+
+适用于 **Apple Silicon（M 系列）Mac，macOS 14 或更高版本**。Intel Mac 暂不支持。安装包已内置运行时，无需自行安装 .NET、Node、Python 或 Git。
+
+1. 在 [Releases 页面](https://github.com/HoboCY/AgentDock/releases) 下载 `AgentDockSetup-<版本>-macos-arm64.dmg`。只需这一个文件，Source code 是源码，不用于安装。
+2. 双击下载的 DMG，Finder 会打开名为 `AgentDock <版本>` 的磁盘窗口。
+3. 双击窗口内的 `AgentDockSetup-<版本>-macos-arm64.app` 安装器；Finder 隐藏扩展名时可能不显示 `.app`。由安装器自动完成文件安装和创建启动入口。
+4. 出现“安装 AgentDock …？”对话框后，点击 **“安装”**，等待显示“安装完成”。
+5. 在完成对话框中点击 **“启动”**，进入 AgentDock 主面板。
+6. 在“开始使用”中依次完成：启动后台 → 保存你自己的 OpenCode Go API Key → 接入 Codex → 启用全局委派。接入完成后重启 Codex 桌面 App，并新建对话验证 AgentDock 工具。
+7. 安装完成后可在 Finder 中推出 `AgentDock <版本>` 磁盘。以后从用户“应用程序”目录中的 `AgentDock.app` 启动；Finder 按 `Shift + Command + G`，输入 `~/Applications` 即可进入。
+
+如果用户“应用程序”目录中没有入口，在 Finder 按 `Shift + Command + G`，输入 `~/Library/Application Support/AgentDock`，打开其中的 `AgentDock.app`。首次配置的详细说明见 [安装与接入指南](../../docs/installation.md#二安装)。
+
+### 首次打开被 macOS 拦截
+
+当前预发布包**未签名、未公证**。如果提示“无法验证开发者”或“Apple 无法检查是否包含恶意软件”，并且你确认文件来自本仓库的 Release、信任其来源，可按 Apple 提供的方法处理：
+
+1. 先尝试打开安装器一次，再进入 **系统设置 → 隐私与安全性**。
+2. 找到对应 AgentDock 的拦截提示，点击 **“仍要打开”**（Open Anyway），按提示认证并确认打开，然后继续安装。
+
+这是对该 App 的手动放行，不代表安装包已通过 Apple 公证。若没有放行按钮，或提示“已损坏”“会损坏电脑”，请停止安装并向维护者提供完整提示。不要关闭 Gatekeeper 或使用删除隔离标记的命令。参见 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
+
+### 更新已有安装
+
+先让未完成任务结束或明确取消，再运行新版 DMG 中的安装器，点击“安装”。安装器会更新已有安装，保留用户数据与 Keychain 凭据；有排队、运行或暂停任务时会拒绝更新。
+
+## 开发者构建与验证
+
 运行时锁文件 `runtime-lock.json` 固定 OpenCode 1.18.30、Codex sandbox 0.153.4、Git 2.54.0、.NET SDK 10.0.401 / Runtime 10.0.12。支持范围从 arm64、macOS 14 起设置，实测系统见 `docs/validation/macos.md`，不能把一个 OS 版本的结果推广为全部系统已验收。
 
 构建在 Mac 上需要固定 SDK、Python 3 与 CLT；终端用户运行自包含安装包不需要这些开发工具。构建脚本不下载 OpenCode/Codex，输入必须为锁文件指定的官方 npm 归档及其原样展开目录。构建时核对归档 SHA-512、版本及每个展开文件，拒绝额外文件和符号链接。

@@ -6,11 +6,11 @@
 
 ## 安装与使用
 
-见 [Windows 安装说明](docs/installation.md) 和 [Mac 安装说明](packaging/mac/README.md)。包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 Git；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在各设备主面板独立配置，不迁移既有 MCP 凭据或角色。
+见 [Windows 安装说明](docs/installation.md) 和 [Mac DMG 安装教程](packaging/mac/README.md#用户安装教程)。包包含 .NET 运行时、固定版本 OpenCode、Codex 沙箱和 Git；最终用户不需要安装开发 SDK、Node 或 Python。OpenCode Go 凭据在各设备主面板独立配置，不迁移既有 MCP 凭据或角色。
 
 维护者通过 [GitHub 预发布流程](docs/releasing.md) 统一生成 Windows x64 EXE 和 Apple Silicon Mac DMG：一个测试标签触发两个平台构建，两边门禁全部通过后生成同一个 Release 草稿，可核对后公开。Mac 包目前未签名/公证，可能被 Gatekeeper 拦截；当前不声明稳定发行就绪。
 
-新版 Windows 安装器内置完整程序包，用户只需下载 EXE；JSON 清单与校验文件均为可选维护资料。旧版 beta.1 的分体包按其 Release 说明安装。
+Release 只上传 Windows EXE 和 Mac DMG，按系统下载一个即可；两个安装器均内置完整程序包。Mac 用户打开 DMG 后运行其中的安装器，点击“安装”，完成后点击“启动”。JSON 清单与校验文件用于构建内部验证，无需下载。
 
 默认全局并发 4；同项目及父子项目的写任务串行。关闭窗口不会停止任务，重连不会重跑。完全退出是独立操作。后台异常退出后，已运行任务中断，队列暂停；Codex 需明确决定后续执行。
 

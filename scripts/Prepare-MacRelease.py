@@ -69,6 +69,19 @@ def prepare_release(version, package, output):
 
 适用于 Apple Silicon arm64 Mac。下载并打开 `{dmg}`，挂载后运行其中的安装器。DMG 内置完整 payload；普通用户不需要 JSON/ZIP，也无需手工复制程序文件。
 
+### DMG 安装步骤
+
+要求 macOS 14 或更高版本，支持 M 系列芯片，暂不支持 Intel Mac。
+
+1. 下载 `{dmg}`，双击打开，在 Finder 磁盘窗口中双击 `AgentDockSetup-{version}-macos-arm64.app` 安装器。
+2. 在“安装 AgentDock …？”对话框中点击 **“安装”**，等待显示“安装完成”。
+3. 点击 **“启动”**，按“开始使用”向导完成后台启动、OpenCode Go API Key、Codex 接入及全局委派配置；接入完成后重启 Codex 并新建对话。
+4. 安装完成后可推出 DMG。以后从 `~/Applications/AgentDock.app` 启动；若没有该入口，在 Finder 按 `Shift + Command + G`，输入 `~/Library/Application Support/AgentDock`，打开其中的 `AgentDock.app`。
+
+如果首次打开提示“无法验证开发者”或“Apple 无法检查是否包含恶意软件”，确认下载来自本仓库且信任来源后，可先尝试打开一次，再到 **系统设置 → 隐私与安全性 → 仍要打开**，按提示认证并确认打开。若提示“已损坏”“会损坏电脑”或没有放行按钮，请停止安装并反馈完整提示。参见 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
+
+完整教程及更新说明：[Mac 安装教程](https://github.com/HoboCY/AgentDock/blob/main/packaging/mac/README.md#用户安装教程)。
+
 本候选未签名、未公证，下载运行可能被 Gatekeeper 拦截，尚未完成真实下载验收。不推荐关闭 Gatekeeper 或删除隔离标记来绕过检查；稳定发布仍保留签名、公证和真实下载验收要求。
 
 原始构建清单 releaseReady=false，releaseBlocked:
