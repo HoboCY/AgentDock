@@ -976,6 +976,9 @@ try {
         $main5 = Find-Window $desktop5.Id 'AgentDock' 45000
         Add-Assertion $caseToast 'fixture-desktop-window' ($null -ne $main5)
         if (-not $main5) { throw 'Toast fixture 桌面窗口未出现。' }
+        $tasksTab = Find-Child $main5 '任务' 5000 'ControlType.TabItem'
+        if (-not $tasksTab) { throw 'Toast fixture 未找到任务页签。' }
+        $toastEvidence['tasksTabSelectMethod'] = Invoke-Action $tasksTab '选择任务页签'
         $pausedRow = Find-Child $main5 '暂停' 20000
         Add-Assertion $caseToast 'paused-task-visible-in-ui' ($null -ne $pausedRow)
 

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using AgentDock.Core;
 using Avalonia;
@@ -35,6 +36,7 @@ public sealed partial class MainWindow : ShadUI.Window
     private readonly TextBlock _emptyDescription = new() { Classes = { "muted" }, TextAlignment = TextAlignment.Center, MaxWidth = 420 };
     private readonly StackPanel _emptyTasks = new() { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24), IsHitTestVisible = false };
     private readonly ListBox _taskList = new() { Classes = { "taskTable" } };
+    private readonly ObservableCollection<TaskRow> _taskRows = [];
     private readonly TabControl _pages = new() { Classes = { "workspace" } };
     private readonly Button _stopButton;
     private readonly Button _viewButton;
@@ -178,13 +180,27 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private void RefreshTasks()
     {
-        var selectedId = (_taskList.SelectedItem as TaskSummary)?.Id;
+        var selectedId = (_taskList.SelectedItem as TaskRow)?.Summary.Id;
         var filter = _projectFilter.SelectedItem as string;
         var tasks = _state.Tasks
             .Where(t => filter is null || filter == AllProjects || string.Equals(t.Project, filter, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        _taskList.ItemsSource = tasks;
-        _taskList.SelectedItem = tasks.FirstOrDefault(t => t.Id == selectedId) ?? tasks.FirstOrDefault();
+        // Keep rows alive across polls instead of rebuilding their native accessibility trees.
+        var existing = _taskRows.ToDictionary(row => row.Summary.Id);
+        var ids = tasks.Select(task => task.Id).ToHashSet(StringComparer.Ordinal);
+        for (var i = _taskRows.Count - 1; i >= 0; i--)
+            if (!ids.Contains(_taskRows[i].Summary.Id)) _taskRows.RemoveAt(i);
+        for (var i = 0; i < tasks.Length; i++)
+        {
+            if (!existing.TryGetValue(tasks[i].Id, out var row))
+                _taskRows.Insert(i, new TaskRow(tasks[i]));
+            else
+            {
+                if (!ReferenceEquals(_taskRows[i], row)) _taskRows.Move(_taskRows.IndexOf(row), i);
+                row.Update(tasks[i]);
+            }
+        }
+        _taskList.SelectedItem = _taskRows.FirstOrDefault(row => row.Summary.Id == selectedId) ?? _taskRows.FirstOrDefault();
         _countText.Text = filter is null || filter == AllProjects ? $"共 {tasks.Length} 项" : $"筛选 {tasks.Length} / {_state.Tasks.Length} 项";
         _compactMetrics.Text = $"活跃 {tasks.Count(t => t.Status.IsUnfinished())} 项   ·   输入 {Fmt.Total(tasks.Select(t => t.InputTokens))}   ·   输出 {Fmt.Total(tasks.Select(t => t.OutputTokens))}";
         _emptyTasks.IsVisible = tasks.Length == 0;
@@ -197,7 +213,7 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private void UpdateSelection()
     {
-        var task = _taskList.SelectedItem as TaskSummary;
+        var task = (_taskList.SelectedItem as TaskRow)?.Summary;
         _stopButton.IsEnabled = task is { Status: TaskStatus.Queued or TaskStatus.Running or TaskStatus.Paused };
         _viewButton.IsEnabled = task is not null;
         RefreshInspector(task);
@@ -354,7 +370,7 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private async Task StopSelectedAsync()
     {
-        if (_taskList.SelectedItem is not TaskSummary task) return;
+        if (_taskList.SelectedItem is not TaskRow { Summary: var task }) return;
         if (!task.Status.IsUnfinished())
         {
             ShowNotice($"任务已结束（{Fmt.Status(task.Status)}），无需停止。", false);
@@ -373,7 +389,7 @@ public sealed partial class MainWindow : ShadUI.Window
 
     private async Task ViewSelectedAsync()
     {
-        if (_taskList.SelectedItem is not TaskSummary task) return;
+        if (_taskList.SelectedItem is not TaskRow { Summary: var task }) return;
         if (_result is null || _result.TaskId != task.Id || !_result.IsVisible)
         {
             _result?.Close();

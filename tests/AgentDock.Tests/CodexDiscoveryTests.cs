@@ -190,6 +190,63 @@ public sealed class CodexDiscoveryTests : IDisposable
         Assert.False(start.UseShellExecute);
     }
 
+    [Fact]
+    public void Npm_package_entry_launch_uses_its_install_prefix_node_without_changing_the_parent_environment()
+    {
+        var prefix = Path.Combine(root, "custom nvm", "versions", "node", "v25.0.0");
+        var entry = CreateFile(prefix, "lib", "node_modules", "@openai", "codex", "bin", "codex.js");
+        var nodeDirectory = Path.Combine(prefix, "bin");
+        CreateFile(nodeDirectory, "node");
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        var integration = new CodexIntegration(Path.Combine(root, "data"), Path.Combine(root, "home"), entry);
+
+        var start = integration.CreateStartInfo(["plugin", "list", "--json"]);
+
+        Assert.Equal(nodeDirectory + Path.PathSeparator + originalPath, start.Environment["PATH"]);
+        Assert.Equal(originalPath, Environment.GetEnvironmentVariable("PATH"));
+        Assert.Equal(entry, integration.Executable);
+        Assert.Equal(entry, start.FileName);
+        Assert.Equal(integration.CodexHome, start.Environment["CODEX_HOME"]);
+        Assert.Equal(new[] { "plugin", "list", "--json" }, start.ArgumentList);
+        Assert.False(start.UseShellExecute);
+    }
+
+    [Theory]
+    [InlineData("@other", "codex", true)]
+    [InlineData("@openai", "other", true)]
+    [InlineData("@openai", "codex", false)]
+    public void Npm_entry_without_a_matching_codex_node_keeps_the_inherited_path(string scope, string package, bool hasNode)
+    {
+        var prefix = Path.Combine(root, "prefix");
+        var entry = CreateFile(prefix, "lib", "node_modules", scope, package, "bin", "codex.js");
+        if (hasNode) CreateFile(prefix, "bin", "node");
+        var integration = new CodexIntegration(Path.Combine(root, "data"), Path.Combine(root, "home"), entry);
+
+        Assert.Equal(Environment.GetEnvironmentVariable("PATH"), integration.CreateStartInfo(["plugin", "list", "--json"]).Environment["PATH"]);
+        Assert.Equal(entry, integration.Executable);
+    }
+
+    [MacPathFact]
+    public async Task Mac_npm_package_entry_launches_with_same_prefix_node()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var prefix = Path.Combine(root, "custom nvm", "versions", "node", "v25.0.0");
+        var entry = CreateFile(prefix, "lib", "node_modules", "@openai", "codex", "bin", "codex.js");
+        File.WriteAllText(entry, "#!/usr/bin/env node\n");
+        var node = CreateFile(prefix, "bin", "node");
+        File.WriteAllText(node, "#!/bin/sh\nprintf '%s' '{\"installed\":[]}'\n");
+        var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        File.SetUnixFileMode(entry, mode);
+        File.SetUnixFileMode(node, mode);
+        var integration = new CodexIntegration(Path.Combine(root, "data"), Path.Combine(root, "home"), entry);
+
+        var status = await integration.InspectAsync(CancellationToken.None);
+
+        Assert.Equal(entry, status.Executable);
+        Assert.False(status.Registered);
+        Assert.Contains("已找到 Codex", status.Message);
+    }
+
     [MacPathFact]
     public async Task Mac_npm_style_symlink_launches_with_its_sibling_node()
     {

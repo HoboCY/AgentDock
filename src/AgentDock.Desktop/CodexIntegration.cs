@@ -85,7 +85,13 @@ public sealed class CodexIntegration
         start.Environment["CODEX_HOME"] = CodexHome;
         // npm's Unix launcher uses /usr/bin/env node. Finder-launched apps may lack the nvm PATH.
         // Keep the selected bin/symlink location so its matching Node is used only by this child.
-        var bin = Path.GetDirectoryName(Path.GetFullPath(Executable!))!;
+        var executable = Path.GetFullPath(Executable!);
+        var bin = Path.GetDirectoryName(executable)!;
+        // macOS file pickers resolve npm's bin/codex symlink to the package entry point.
+        var npmEntry = Path.Combine("lib", "node_modules", "@openai", "codex", "bin", "codex.js");
+        if (!File.Exists(Path.Combine(bin, "node")) &&
+            executable.EndsWith(Path.DirectorySeparatorChar + npmEntry, StringComparison.Ordinal))
+            bin = Path.Combine(executable[..^npmEntry.Length], "bin");
         if (File.Exists(Path.Combine(bin, "node")))
         {
             start.Environment.TryGetValue("PATH", out var inheritedPath);

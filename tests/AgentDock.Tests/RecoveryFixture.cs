@@ -15,6 +15,16 @@ public static class RecoveryFixture
             catch (DockException error) { Console.WriteLine(error.Code); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or TimeoutException or OperationCanceledException)
             { Console.WriteLine("PIPE_DENIED:" + error.GetType().Name); }
+            if (OperatingSystem.IsWindows())
+            {
+                var executable = Path.ChangeExtension(typeof(AgentDock.Host.Program).Assembly.Location, ".exe");
+                try
+                {
+                    await new DockClient(Path.Combine(args[1], "launch-denied"), executable).EnsureHostAsync();
+                    Console.WriteLine("HOST_LAUNCH_ACCEPTED");
+                }
+                catch (DockException error) { Console.WriteLine("HOST_LAUNCH_DENIED:" + error.Code); }
+            }
             return;
         }
         if (args.Length != 2 || args[0] != "--crash-fixture") return;

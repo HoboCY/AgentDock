@@ -82,13 +82,8 @@ public sealed class ToastWindow : Window
         };
         border.PointerPressed += (_, _) => { onClick(); Close(); };
         Content = border;
-        Opened += (_, _) =>
-        {
-            if (OperatingSystem.IsWindows())
-                Dispatcher.UIThread.Post(PositionBottomRight, DispatcherPriority.Loaded);
-            else
-                PositionBottomRight();
-        };
+        // SizeToContent must finish measuring before positioning on either desktop backend.
+        Opened += (_, _) => Dispatcher.UIThread.Post(PositionBottomRight, DispatcherPriority.Loaded);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         timer.Tick += (_, _) => { timer.Stop(); Close(); };
         Closed += (_, _) => timer.Stop();

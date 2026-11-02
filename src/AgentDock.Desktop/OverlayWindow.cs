@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace AgentDock.Desktop;
 
@@ -14,6 +15,8 @@ public sealed class OverlayWindow : Window
     private readonly AppState _state;
     private readonly TextBlock _status = new() { FontSize = 12, Opacity = .8, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _tasks = new() { Spacing = 7 };
+    private readonly TextBlock _emptyMessage = new() { FontSize = 12.5, Opacity = .7, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White };
+    private readonly Dictionary<string, (StackPanel Panel, TextBlock Title, TextBlock Detail)> _rows = new(StringComparer.Ordinal);
     private bool _placed;
 
     public OverlayWindow(App app)
@@ -72,13 +75,14 @@ public sealed class OverlayWindow : Window
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
         };
         Content = root;
-        Opened += (_, _) =>
-        {
-            if (_placed) return;
-            _placed = true;
-            PlaceBottomRight();
-        };
+        void SchedulePlacement(object? sender, EventArgs args) =>
+            Dispatcher.UIThread.Post(EnsureOnScreen, DispatcherPriority.Loaded);
+        Opened += SchedulePlacement;
+        ScalingChanged += SchedulePlacement;
+        Screens.Changed += SchedulePlacement;
+        Closed += (_, _) => Screens.Changed -= SchedulePlacement;
         _state.Changed += Refresh;
+        _tasks.Children.Add(_emptyMessage);
         Refresh();
     }
 
@@ -86,39 +90,44 @@ public sealed class OverlayWindow : Window
     {
         var activeCount = _state.Tasks.Count(t => t.Status.IsUnfinished());
         _status.Text = !_state.HostReachable ? "后台未连接" : activeCount == 0 ? "无活跃任务" : $"活跃 {activeCount}";
-        _tasks.Children.Clear();
         var active = _state.Tasks.Where(t => t.Status.IsUnfinished()).ToArray();
-        if (active.Length == 0)
+        var ids = active.Select(task => task.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var id in _rows.Keys.Where(id => !ids.Contains(id)).ToArray())
         {
-            _tasks.Children.Add(new TextBlock
-            {
-                Text = _state.HostReachable ? "暂无活跃任务" : "后台未连接，显示最后一次已知数据。",
-                FontSize = 12.5,
-                Opacity = .7,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Brushes.White
-            });
-            return;
+            _tasks.Children.Remove(_rows[id].Panel);
+            _rows.Remove(id);
         }
+        _emptyMessage.IsVisible = active.Length == 0;
+        _emptyMessage.Text = _state.HostReachable ? "暂无活跃任务" : "后台未连接，显示最后一次已知数据。";
         var now = DateTimeOffset.Now;
-        foreach (var task in active)
+        for (var i = 0; i < active.Length; i++)
         {
-            var itemTitle = new TextBlock { Text = $"{Fmt.Status(task.Status)} · {task.Title}", FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Brushes.White };
-            ToolTip.SetTip(itemTitle, task.Project + "\n" + task.Title);
-            var detail = new TextBlock
+            var task = active[i];
+            if (!_rows.TryGetValue(task.Id, out var row))
             {
-                Text = $"{task.Role} · {Fmt.Elapsed(task, now)} · {Fmt.Speed(task.GenerationTokensPerSecond)}\n输入 {Fmt.Tokens(task.InputTokens)} / 输出 {Fmt.Tokens(task.OutputTokens)}",
-                FontSize = 12,
-                Opacity = .75,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = Brushes.White
-            };
-            _tasks.Children.Add(new StackPanel { Spacing = 1, Children = { itemTitle, detail } });
+                var title = new TextBlock { FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Brushes.White };
+                var detail = new TextBlock { FontSize = 12, Opacity = .75, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White };
+                row = (new StackPanel { Spacing = 1, Children = { title, detail } }, title, detail);
+                _rows.Add(task.Id, row);
+                _tasks.Children.Insert(i + 1, row.Panel);
+            }
+            else if (!ReferenceEquals(_tasks.Children[i + 1], row.Panel))
+                _tasks.Children.Move(_tasks.Children.IndexOf(row.Panel), i + 1);
+            row.Title.Text = $"{Fmt.Status(task.Status)} · {task.Title}";
+            ToolTip.SetTip(row.Title, task.Project + "\n" + task.Title);
+            row.Detail.Text = $"{task.Role} · {Fmt.Elapsed(task, now)} · {Fmt.Speed(task.GenerationTokensPerSecond)}\n输入 {Fmt.Tokens(task.InputTokens)} / 输出 {Fmt.Tokens(task.OutputTokens)}";
         }
     }
 
-    private void PlaceBottomRight()
+    private void EnsureOnScreen()
     {
+        if (!IsVisible) return;
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null) return;
+        var scale = OperatingSystem.IsWindows() ? screen.Scaling : 1;
+        var rectangle = new PixelRect(Position, PixelSize.FromSize(ClientSize, scale));
+        if (_placed && screen.WorkingArea.Contains(rectangle)) return;
+        _placed = true;
         WindowPlacement.BottomRight(this, 28);
     }
 

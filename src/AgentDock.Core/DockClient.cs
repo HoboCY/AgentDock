@@ -29,9 +29,13 @@ public sealed class DockClient(string? home = null, string? hostExecutable = nul
             await MacHostLauncher.StartAsync(Home, executable, cancellationToken);
             return;
         }
-        var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
-        start.ArgumentList.Add("--host"); start.ArgumentList.Add("--home"); start.ArgumentList.Add(Home);
-        using var process = Process.Start(start) ?? throw new IOException("后台启动失败。");
+        if (OperatingSystem.IsWindows()) WindowsHostLauncher.Start(executable, Home);
+        else
+        {
+            var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
+            start.ArgumentList.Add("--host"); start.ArgumentList.Add("--home"); start.ArgumentList.Add(Home);
+            using var process = Process.Start(start) ?? throw new IOException("后台启动失败。");
+        }
         var until = DateTime.UtcNow.AddSeconds(20);
         while (DateTime.UtcNow < until)
         {

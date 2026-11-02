@@ -173,6 +173,11 @@ public sealed class HostIntegrationTests : IAsyncLifetime
             Assert.DoesNotContain("ACCEPTED", observed);
             Assert.True(observed.Contains("UntrustedClient") || observed.Contains("PIPE_DENIED:UnauthorizedAccessException"), observed);
             if (OperatingSystem.IsMacOS()) Assert.Contains("UntrustedClient", observed);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Contains("HOST_LAUNCH_DENIED:UntrustedClient", observed);
+                Assert.DoesNotContain("HOST_LAUNCH_ACCEPTED", observed);
+            }
         }
         finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
     }

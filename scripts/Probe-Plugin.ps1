@@ -366,6 +366,7 @@ try {
     }
 
     Write-Host "== 启动 codex app-server 并真实调用 MCP 工具"
+    $backgroundProcess = $null
     $process = Start-CodexAppServer -Exe $codex -CodexHome $IsolatedHome
     $stderrTask = $process.StandardError.ReadToEndAsync()
     try {
@@ -411,6 +412,10 @@ try {
         if (-not $SelfTest -and $ExpectedHostVersion -and ([string]$extracted.Status.version) -ne $ExpectedHostVersion) {
             throw "后台版本不符：$($extracted.Status.version) != $ExpectedHostVersion"
         }
+        if (-not $SelfTest) {
+            $backgroundProcess = Get-Process -Id $extracted.Status.processId -ErrorAction Stop
+            $null = $backgroundProcess.Handle
+        }
         $result.assertions = [ordered]@{
             mcpConnected   = $true
             toolVisible    = $true
@@ -428,6 +433,13 @@ try {
             $stderrText = $stderrTask.Result
             if ($stderrText) { $result.appServerStderr = $stderrText.Substring(0, [Math]::Min(4000, $stderrText.Length)) }
         } catch { }
+        if ($null -ne $backgroundProcess) {
+            try {
+                $survived = -not $backgroundProcess.WaitForExit(2000)
+                $result.hostAfterClientExit = @{ processId = $backgroundProcess.Id; survived = $survived }
+                if (-not $survived) { throw 'Codex 客户端退出后，按需启动的后台也退出了。' }
+            } finally { $backgroundProcess.Dispose() }
+        }
     }
 } catch {
     $failure = $_.Exception.Message

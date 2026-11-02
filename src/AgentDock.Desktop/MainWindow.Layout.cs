@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using AgentDock.Core;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
+using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -89,7 +91,8 @@ public sealed partial class MainWindow
         } }, 0);
         Put(listHeading, _projectFilter, 0, 1);
         Put(listHeading, _refreshButton, 0, 2);
-        _taskList.ItemTemplate = new FuncDataTemplate<TaskSummary>((task, _) => BuildTaskRow(task));
+        _taskList.ItemTemplate = new FuncDataTemplate<TaskRow>((_, _) => BuildTaskRow(), supportsRecycling: true);
+        _taskList.ItemsSource = _taskRows;
         AutomationProperties.SetName(_taskList, "任务列表");
         _taskList.DoubleTapped += async (_, _) => await ViewSelectedAsync();
         _emptyTasks.Children.Add(new Border
@@ -181,28 +184,56 @@ public sealed partial class MainWindow
         ToolTip.SetTip(_selectionText, task is null ? null : $"{task.Project}\n{task.Id}\n{task.Error}");
     }
 
-    private static Control? BuildTaskRow(TaskSummary? task)
+    internal sealed class TaskRow(TaskSummary task) : INotifyPropertyChanged
     {
-        // Recycled Avalonia containers clear the data template with null.
-        if (task is null) return null;
-        var state = StatusBrush(task.Status);
+        public TaskSummary Summary { get; private set; } = task;
+        public string Title => Summary.Title;
+        public string Meta => $"{ProjectName(Summary.Project)}  ·  {Summary.Role}";
+        public string Status => Fmt.Status(Summary.Status);
+        public IBrush Brush { get; private set; } = StatusBrush(task.Status);
+        public string Elapsed { get; private set; } = Fmt.Elapsed(task, DateTimeOffset.Now);
+        public string Output => "输出 " + Fmt.Tokens(Summary.OutputTokens);
+        public string Tooltip => $"{Title}\n{Summary.Project}\n输入 {Fmt.Tokens(Summary.InputTokens)} · 输出 {Fmt.Tokens(Summary.OutputTokens)}\n生成速度 {Fmt.Speed(Summary.GenerationTokensPerSecond)}" + (Summary.Error is null ? "" : "\n错误：" + Summary.Error);
+        public string AccessibleName => $"{Title}，{Status}，{Summary.Role}，{Summary.Project}，输入 {Fmt.Tokens(Summary.InputTokens)}，输出 {Fmt.Tokens(Summary.OutputTokens)}，生成速度 {Fmt.Speed(Summary.GenerationTokensPerSecond)}，总耗时 {Elapsed}";
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void Update(TaskSummary summary)
+        {
+            if (Summary.Status != summary.Status) Brush = StatusBrush(summary.Status);
+            Summary = summary;
+            Elapsed = Fmt.Elapsed(summary, DateTimeOffset.Now);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+        }
+    }
+
+    private static Control BuildTaskRow()
+    {
         var grid = new Grid { Name = "TaskDataRow", ColumnDefinitions = new ColumnDefinitions("60,*,90"), ColumnSpacing = 10, MinHeight = 48 };
+        var dot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), HorizontalAlignment = HorizontalAlignment.Left };
+        var statusText = new TextBlock { FontSize = 11, FontWeight = FontWeight.Medium };
         var status = new StackPanel { Spacing = 7, VerticalAlignment = VerticalAlignment.Center, Children =
         {
-            new Border { Width = 8, Height = 8, Background = state, CornerRadius = new CornerRadius(4), HorizontalAlignment = HorizontalAlignment.Left },
-            new TextBlock { Text = Fmt.Status(task.Status), FontSize = 11, Foreground = state, FontWeight = FontWeight.Medium }
+            dot, statusText
         } };
         Put(grid, status, 0);
-        var title = new TextBlock { Text = task.Title, FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = Ui.Ink, TextTrimming = TextTrimming.CharacterEllipsis };
-        var meta = new TextBlock { Text = $"{ProjectName(task.Project)}  ·  {task.Role}", FontSize = 11, Foreground = Ui.Muted, TextTrimming = TextTrimming.CharacterEllipsis };
+        var title = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = Ui.Ink, TextTrimming = TextTrimming.CharacterEllipsis };
+        var meta = new TextBlock { FontSize = 11, Foreground = Ui.Muted, TextTrimming = TextTrimming.CharacterEllipsis };
+        var elapsed = new TextBlock { FontSize = 12, Foreground = Ui.Ink, HorizontalAlignment = HorizontalAlignment.Right };
+        var output = new TextBlock { FontSize = 11, Foreground = Ui.Muted, TextTrimming = TextTrimming.CharacterEllipsis };
         Put(grid, new StackPanel { Spacing = 7, VerticalAlignment = VerticalAlignment.Center, Children = { title, meta } }, 0, 1);
         Put(grid, new StackPanel { Spacing = 7, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Children =
         {
-            new TextBlock { Text = Fmt.Elapsed(task, DateTimeOffset.Now), FontSize = 12, Foreground = Ui.Ink, HorizontalAlignment = HorizontalAlignment.Right },
-            new TextBlock { Text = "输出 " + Fmt.Tokens(task.OutputTokens), FontSize = 11, Foreground = Ui.Muted, TextTrimming = TextTrimming.CharacterEllipsis }
+            elapsed, output
         } }, 0, 2);
-        ToolTip.SetTip(grid, $"{task.Title}\n{task.Project}\n输入 {Fmt.Tokens(task.InputTokens)} · 输出 {Fmt.Tokens(task.OutputTokens)}\n生成速度 {Fmt.Speed(task.GenerationTokensPerSecond)}" + (task.Error is null ? "" : "\n错误：" + task.Error));
-        AutomationProperties.SetName(grid, $"{task.Title}，{Fmt.Status(task.Status)}，{task.Role}，{task.Project}，输入 {Fmt.Tokens(task.InputTokens)}，输出 {Fmt.Tokens(task.OutputTokens)}，生成速度 {Fmt.Speed(task.GenerationTokensPerSecond)}，总耗时 {Fmt.Elapsed(task, DateTimeOffset.Now)}");
+        title.Bind(TextBlock.TextProperty, new Binding(nameof(TaskRow.Title)));
+        meta.Bind(TextBlock.TextProperty, new Binding(nameof(TaskRow.Meta)));
+        statusText.Bind(TextBlock.TextProperty, new Binding(nameof(TaskRow.Status)));
+        statusText.Bind(TextBlock.ForegroundProperty, new Binding(nameof(TaskRow.Brush)));
+        dot.Bind(Border.BackgroundProperty, new Binding(nameof(TaskRow.Brush)));
+        elapsed.Bind(TextBlock.TextProperty, new Binding(nameof(TaskRow.Elapsed)));
+        output.Bind(TextBlock.TextProperty, new Binding(nameof(TaskRow.Output)));
+        grid.Bind(ToolTip.TipProperty, new Binding(nameof(TaskRow.Tooltip)));
+        grid.Bind(AutomationProperties.NameProperty, new Binding(nameof(TaskRow.AccessibleName)));
         return grid;
     }
 

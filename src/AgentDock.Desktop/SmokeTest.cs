@@ -63,6 +63,11 @@ public static partial class SmokeTest
             app.ShowOverlay();
             await Task.Delay(500);
             overlayShown = app.Overlay.IsVisible;
+            var overlayControls = app.Overlay.GetVisualDescendants().OfType<TextBlock>().ToArray();
+            app.Overlay.Refresh();
+            if (!overlayControls.SequenceEqual(app.Overlay.GetVisualDescendants().OfType<TextBlock>()))
+                throw new InvalidOperationException("Overlay refresh must preserve existing task controls.");
+            pageChecks.Add("overlay-refresh-preserves-controls");
             Capture(app.Overlay, outputPath + ".overlay.png");
             stages.Add(Sample("overlay-shown"));
 
@@ -166,13 +171,47 @@ public static partial class SmokeTest
             await Task.Delay(300);
             tasks.SelectedIndex = 0;
             await Task.Delay(150);
+            var initialItems = tasks.Items.Cast<MainWindow.TaskRow>().ToDictionary(row => row.Summary.Id);
+            var initialControls = main.GetVisualDescendants().OfType<Grid>().Where(grid => grid.Name == "TaskDataRow" && grid.IsEffectivelyVisible).ToArray();
+            var selectedId = ((MainWindow.TaskRow)tasks.SelectedItem!).Summary.Id;
+            for (var i = 0; i < 8; i++)
+            {
+                await app.State.PollAsync();
+                await Task.Delay(30);
+            }
+            foreach (var row in tasks.Items.Cast<MainWindow.TaskRow>())
+            {
+                if (initialItems.TryGetValue(row.Summary.Id, out var initial) && !ReferenceEquals(row, initial))
+                    throw new InvalidOperationException("Polling must preserve task row identity.");
+                if (!ReferenceEquals(row.Summary, app.State.Tasks.Single(task => task.Id == row.Summary.Id)))
+                    throw new InvalidOperationException("Task actions must use the latest summary.");
+            }
+            if (((MainWindow.TaskRow)tasks.SelectedItem!).Summary.Id != selectedId ||
+                initialControls.Any(row => !main.GetVisualDescendants().Contains(row)))
+                throw new InvalidOperationException("Polling must preserve selection and realized task controls.");
+            checks.Add("polling-preserves-rows-selection-and-latest-summary");
+            var selectedRow = (MainWindow.TaskRow)tasks.SelectedItem!;
+            var originalSummary = selectedRow.Summary;
+            try
+            {
+                selectedRow.Update(originalSummary with
+                {
+                    Title = "刷新后的任务标题", Status = AgentDock.Core.TaskStatus.Completed,
+                    InputTokens = 12345, OutputTokens = 6789, FinishedAt = originalSummary.AcceptedAt.AddSeconds(25)
+                });
+                CheckTaskRows(main);
+                if (selectedRow.Elapsed != "0:25")
+                    throw new InvalidOperationException("Completed rows must freeze elapsed time at FinishedAt.");
+            }
+            finally { selectedRow.Update(originalSummary); }
+            checks.Add("reused-row-updates-values-and-freezes-completed-elapsed");
             CheckTaskRows(main);
-            CheckInspector(main, (AgentDock.Core.TaskSummary)tasks.SelectedItem!);
+            CheckInspector(main, ((MainWindow.TaskRow)tasks.SelectedItem!).Summary);
             if (tasks.ItemCount > 1)
             {
                 tasks.SelectedIndex = 1;
                 await Task.Delay(150);
-                CheckInspector(main, (AgentDock.Core.TaskSummary)tasks.SelectedItem!);
+                CheckInspector(main, ((MainWindow.TaskRow)tasks.SelectedItem!).Summary);
                 tasks.SelectedIndex = 0;
                 await Task.Delay(150);
             }
@@ -184,10 +223,10 @@ public static partial class SmokeTest
                 filter.SelectedIndex = filter.ItemCount - 1;
                 await Task.Delay(150);
                 var project = (string)filter.SelectedItem!;
-                var filtered = tasks.Items.Cast<AgentDock.Core.TaskSummary>().ToArray();
+                var filtered = tasks.Items.Cast<MainWindow.TaskRow>().Select(row => row.Summary).ToArray();
                 if (filtered.Length == 0 || filtered.Any(task => task.Project != project))
                     throw new InvalidOperationException("Project filter must restrict the list to the selected project.");
-                CheckInspector(main, (AgentDock.Core.TaskSummary)tasks.SelectedItem!);
+                CheckInspector(main, ((MainWindow.TaskRow)tasks.SelectedItem!).Summary);
                 filter.SelectedIndex = 0;
                 await Task.Delay(150);
                 tasks.SelectedIndex = 0;
@@ -308,6 +347,11 @@ public static partial class SmokeTest
     {
         foreach (var row in window.GetVisualDescendants().OfType<Grid>().Where(grid => grid.Name == "TaskDataRow"))
         {
+            if (!row.IsEffectivelyVisible) continue;
+            if (row.DataContext is not MainWindow.TaskRow item || AutomationProperties.GetName(row) != item.AccessibleName ||
+                !row.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == item.Title) ||
+                !row.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == item.Output))
+                throw new InvalidOperationException("Recycled task rows must expose current titles, usage and accessibility names.");
             var point = row.TranslatePoint(default, window);
             if (row.Bounds.Height < 48 || point is not { } p || p.X < 0 || p.X + row.Bounds.Width > window.Bounds.Width)
                 throw new InvalidOperationException("Two-line task cards must fit within the workspace.");
