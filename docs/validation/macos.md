@@ -79,3 +79,18 @@ RSS 求和可能重复计算共享页，一秒采样可能漏掉短命进程；�
 正式签名/公证、下载分发链路、干净系统、不同缩放及屏幕阅读器、系统托盘菜单和通知弹出的人工验收仍未完成，包保持 `releaseReady=false`。公开发布未授权，#12 不按发行通过关闭。
 
 证据目录：本地 `artifacts/mac-validation/` 的 `plugin-live.json`、`samples.jsonl`、`resource-summary.json`、`mac-installer-gates-4.json`、`real-upgrade-and-login.json`、`plugin-real-upgrade-1.json`、`final-installed-checks.json`、`final-ui-install.json`、TRX 与窗口图像；Mac 本任务目录保留原始输出。测试项目均为合成数据；凭据、用户配置和任务正文不纳入代码仓库。
+
+## 2026-11-02：浏览器下载包的资源签名修复
+
+用户在 M1 Pro / macOS 26.6.2 上打开 `0.1.0-beta.1` 安装器，收到“已损坏，应该推出磁盘映像”。检查用户通过 Edge 下载且带 quarantine 标记的 DMG：SHA-256 为 `3e86aa438c2cba8733554290bc28c6de7491ec4a5d7f0b3f0b22d820c6a366d6`，与公开附件一致，`hdiutil verify` 通过。安装器的 `codesign --verify --deep --strict` 失败，提示 `code has no resources but signature indicates they must be present`；`Info.plist=not bound`、`Sealed Resources=none`。这是发布包的资源封装缺陷，重新下载同一版本不能解决。
+
+修复将安装器与桌面改为 .NET 单文件发布，并在组装完成后为安装器、稳定启动器和桌面 `.app` 添加 ad-hoc 资源签名。单文件发布避免托管 DLL 签名依赖会在 ZIP/普通文件复制时丢失的扩展属性；Host/Engine 的发布方式不变。新增 `Test-MacBundleSignature.py` 已在原始 DMG 上复现失败，并在 Mac 临时目录构建的 `0.1.0-beta.2` 候选上通过：
+
+- DMG 校验、只读挂载、安装器及内置稳定启动器的严格验签通过。
+- 从挂载 DMG 隔离安装后，稳定启动器和桌面的严格验签通过。
+- 修改安装后副本的 `Info.plist`，严格验签按预期失败。
+- 现有 21 项 Mac 安装门禁全部通过。
+
+这不构成 Gatekeeper 放行证明：`spctl --assess` 仍返回拒绝，候选没有 Developer ID 和 Apple 公证。首次桌面冒烟因 Mac 当时没有活动显示器（`CGGetActiveDisplayList` 返回 0 个），在 Avalonia RenderTimer 初始化时报 `-6661`，尚未完成本候选的界面和真实浏览器下载放行验收。未改动系统安全策略、原始下载文件或用户默认安装。
+
+本地证据：`artifacts/validation/mac-bundle-signature-20261102/` 下的 `baseline.json`、`signatures.json`、`setup-gates.json`。CI 同样执行 DMG 与安装后验签，不以资源完整性校验替代正式签名、公证。

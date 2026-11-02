@@ -16,7 +16,9 @@
 
 ### 首次打开被 macOS 拦截
 
-当前预发布包**未签名、未公证**。如果提示“无法验证开发者”或“Apple 无法检查是否包含恶意软件”，并且你确认文件来自本仓库的 Release、信任其来源，可按 Apple 提供的方法处理：
+`0.1.0-beta.1` 的安装器存在资源签名缺失，可能显示“已损坏”。请改用 `0.1.0-beta.2` 或后续版本；重新下载旧版本不能修复此问题。
+
+当前预发布包已做 ad-hoc 资源封装，但**没有 Developer ID 签名和 Apple 公证**，仍可能被 Gatekeeper 拦截。资源完整性校验通过不代表 Apple 信任此 App。如果提示“无法验证开发者”或“Apple 无法检查是否包含恶意软件”，并且你确认文件来自本仓库的 Release、信任其来源，可按 Apple 提供的方法处理：
 
 1. 先尝试打开安装器一次，再进入 **系统设置 → 隐私与安全性**。
 2. 找到对应 AgentDock 的拦截提示，点击 **“仍要打开”**（Open Anyway），按提示认证并确认打开，然后继续安装。
@@ -53,7 +55,7 @@ python3 scripts/Build-MacPackage.py --version 0.1.0 \
 
 Git 的 `Prepare-MacGit.py` 验证本地 init/add/commit/diff/clone，生成文件哈希 provenance；构建器再次核对源码归档和编译完成后的文件清单。Git 的 GPL 源码、构建脚本与许可证随包保留。输出目录必须全新，避免覆盖已有候选与证据。
 
-产物包含 payload ZIP、安装器 `.app`/ZIP/DMG、逐文件可执行清单、组件清单和 SHA-256。payload 模式声明只接受 0644/0755；入口必须可执行。安装器嵌入独立的稳定启动器 bundle，安装时原样复制，不能复制安装器再删除签名覆盖的 payload。没有 Developer ID 签名、公证与完整验收时 `releaseReady=false`。工具链 ad-hoc 签名不等于发行签名。
+产物包含 payload ZIP、安装器 `.app`/ZIP/DMG、逐文件可执行清单、组件清单和 SHA-256。payload 模式声明只接受 0644/0755；入口必须可执行。安装器嵌入独立的稳定启动器 bundle，安装时原样复制，不能复制安装器再删除签名覆盖的 payload。安装器和桌面程序采用 .NET 单文件发布，避免托管 DLL 签名依赖会在 ZIP/普通文件复制时丢失的扩展属性；三个 `.app` 在组装后做 ad-hoc 资源封装与严格验签。没有 Developer ID 签名、公证与完整验收时 `releaseReady=false`。ad-hoc 签名不等于发行签名。
 
 安装布局：
 
@@ -80,6 +82,7 @@ Git 的 `Prepare-MacGit.py` 验证本地 init/add/commit/diff/clone，生成文�
 
 ```sh
 python3 scripts/Test-MacSetupGates.py --setup '/path/AgentDockSetup.app/Contents/MacOS/AgentDock' --work /path/new-gates
+python3 scripts/Test-MacBundleSignature.py --dmg /path/AgentDockSetup-macos-arm64.dmg --work /path/new-signature-gates
 python3 scripts/Probe-MacPlugin.py --codex /path/to/installed/codex \
   --marketplace '/path/to/AgentDock/plugin' --home /path/new-codex-home \
   --output /path/plugin-result.json

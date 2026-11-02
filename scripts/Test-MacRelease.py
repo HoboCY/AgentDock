@@ -133,7 +133,7 @@ class MacReleaseTests(unittest.TestCase):
             self.assertNotIn(b"\r", notes_bytes)
             notes = notes_bytes.decode("utf-8")
             for phrase in (
-                "Apple Silicon arm64", "未签名", "未公证", "Gatekeeper",
+                "Apple Silicon arm64", "ad-hoc 资源封装", "没有 Developer ID 签名和 Apple 公证", "Gatekeeper",
                 "真实下载验收", "不推荐关闭 Gatekeeper", "隔离标记",
                 "DMG 内置完整 payload", "普通用户不需要 JSON/ZIP",
                 "Mac preview", "非稳定发布", "releaseReady=false", "releaseBlocked:",

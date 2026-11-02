@@ -112,6 +112,11 @@ jobs:
           python3 scripts/Test-MacSetupGates.py \
             --setup "$GITHUB_WORKSPACE/artifacts/mac-package/AgentDockSetup-$VERSION-macos-arm64.app/Contents/MacOS/AgentDock" \
             --work "$RUNNER_TEMP/mac-setup-gates"
+      - name: DMG 与安装后签名完整性门禁
+        run: |
+          python3 scripts/Test-MacBundleSignature.py \
+            --dmg "$GITHUB_WORKSPACE/artifacts/mac-package/AgentDockSetup-$VERSION-macos-arm64.dmg" \
+            --work "$RUNNER_TEMP/mac-bundle-signatures"
       - name: 校验并整理 Mac Release 附件
         run: python3 scripts/Prepare-MacRelease.py --version "$VERSION" --package-dir artifacts/mac-package --output-dir artifacts/mac-release
       - uses: actions/upload-artifact@v4
@@ -128,5 +133,6 @@ jobs:
             artifacts/mac-tests/**/*.trx
             artifacts/mac-tests/**/*.xml
             ${{ runner.temp }}/mac-setup-gates/results.json
+            ${{ runner.temp }}/mac-bundle-signatures/results.json
             ${{ runner.temp }}/mac-git/build.log
           if-no-files-found: warn

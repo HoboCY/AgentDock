@@ -82,7 +82,7 @@ def prepare_release(version, package, output):
 
 完整教程及更新说明：[Mac 安装教程](https://github.com/HoboCY/AgentDock/blob/main/packaging/mac/README.md#用户安装教程)。
 
-本候选未签名、未公证，下载运行可能被 Gatekeeper 拦截，尚未完成真实下载验收。不推荐关闭 Gatekeeper 或删除隔离标记来绕过检查；稳定发布仍保留签名、公证和真实下载验收要求。
+本候选已做 ad-hoc 资源封装，但没有 Developer ID 签名和 Apple 公证，Gatekeeper 仍可能拦截，尚未完成真实下载验收。资源完整性校验通过不代表 Apple 信任此 App。不推荐关闭 Gatekeeper 或删除隔离标记来绕过检查；稳定发布仍保留签名、公证和真实下载验收要求。
 
 原始构建清单 releaseReady=false，releaseBlocked:
 {chr(10).join('- ' + item for item in blockers)}

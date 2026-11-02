@@ -198,7 +198,7 @@ def verify_dotnet(lock: dict, allow_mismatch: bool) -> dict:
     return {"sdk": sdk, "expectedSdk": expected_sdk}
 
 
-def publish(project: str, destination: str, version: str, runtime: str, offline: bool) -> None:
+def publish(project: str, destination: str, version: str, runtime: str, offline: bool, single_file: bool = False) -> None:
     os.makedirs(destination, exist_ok=True)
     command = [
         "dotnet", "publish", project, "-c", "Release", "-r", PLATFORM,
@@ -206,7 +206,7 @@ def publish(project: str, destination: str, version: str, runtime: str, offline:
         "--nologo", "-m:1", "--disable-build-servers", "-nr:false", "-p:UseSharedCompilation=false",
         f"-p:Version={version}", f"-p:RuntimeFrameworkVersion={runtime}",
         "-p:DebugType=None", "-p:DebugSymbols=false",
-        "-p:PublishReadyToRun=false", "-p:PublishTrimmed=false", "-p:PublishSingleFile=false",
+        "-p:PublishReadyToRun=false", "-p:PublishTrimmed=false", f"-p:PublishSingleFile={str(single_file).lower()}",
     ]
     if offline:
         command.append("-p:NuGetAudit=false")
@@ -271,6 +271,12 @@ def build_info_plist(template_path: str, version: str, destination: str,
     text = text.replace("@EXECUTABLE@", executable).replace("@BUNDLE_ID@", bundle_id)
     with open(destination, "w", encoding="utf-8") as stream:
         stream.write(text)
+
+
+def seal_app(app: str) -> None:
+    # Ad-hoc sealing provides bundle integrity, not a Developer ID or notarization.
+    run(["codesign", "--force", "--sign", "-", "--timestamp=none", app])
+    run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app])
 
 
 def main(argv: list[str]) -> int:
@@ -392,15 +398,16 @@ def main(argv: list[str]) -> int:
         publish(os.path.join(REPO_ROOT, "src", "AgentDock.Host", "AgentDock.Host.csproj"),
                 os.path.join(stage, "host"), args.version, runtime_framework, args.offline)
         desktop_contents = os.path.join(stage, "desktop", "AgentDock.app", "Contents")
+        # Managed DLL signatures use xattrs, which do not survive our ZIP/install copy path.
         publish(os.path.join(REPO_ROOT, "src", "AgentDock.Desktop", "AgentDock.Desktop.csproj"),
-                os.path.join(desktop_contents, "MacOS"), args.version, runtime_framework, args.offline)
+                os.path.join(desktop_contents, "MacOS"), args.version, runtime_framework, args.offline, single_file=True)
         build_info_plist(DEFAULT_TEMPLATE, args.version, os.path.join(desktop_contents, "Info.plist"),
                          "AgentDock.Desktop", "org.agentdock.desktop")
         publish(os.path.join(REPO_ROOT, "src", "AgentDock.Engine", "AgentDock.Engine.csproj"),
                 os.path.join(stage, "engine"), args.version, runtime_framework, args.offline)
         setup_macos = os.path.join(setup_stage, "AgentDock.app", "Contents", "MacOS")
         publish(os.path.join(REPO_ROOT, "src", "AgentDock.MacSetup", "AgentDock.MacSetup.csproj"),
-                setup_macos, args.version, runtime_framework, args.offline)
+                setup_macos, args.version, runtime_framework, args.offline, single_file=True)
 
         # ---- 3. 组装 payload ----
         print("== 组装 payload", flush=True)
@@ -432,6 +439,7 @@ def main(argv: list[str]) -> int:
         # ---- 4. payload 权限位规范化 + 清单 ----
         check_no_symlinks(stage, "payload staging")
         normalize_stage_modes(stage)
+        seal_app(os.path.dirname(desktop_contents))
         for relative in ("host/AgentDock.Host", "desktop/AgentDock.app/Contents/MacOS/AgentDock.Desktop",
                          "engine/AgentDock.Engine", "engines/opencode/opencode", "engines/codex/bin/codex",
                          "engines/codex/codex-path/rg", "engines/git/bin/git"):
@@ -465,6 +473,7 @@ def main(argv: list[str]) -> int:
         launcher = os.path.join(resources, "launcher", "AgentDock.app", "Contents")
         copy_tree(setup_macos, os.path.join(launcher, "MacOS"), "stable launcher")
         build_info_plist(DEFAULT_TEMPLATE, args.version, os.path.join(launcher, "Info.plist"))
+        seal_app(os.path.dirname(launcher))
         shutil.copy2(payload_zip, os.path.join(resources, "payload.zip"))
         for current, _directories, files in os.walk(setup_macos):
             for name in files:
@@ -473,6 +482,7 @@ def main(argv: list[str]) -> int:
         setup_app = os.path.join(output_dir, f"AgentDockSetup-{args.version}-macos-arm64.app")
         shutil.rmtree(setup_app, ignore_errors=True)
         shutil.move(app_dir, setup_app)
+        seal_app(setup_app)
 
         setup_zip = os.path.join(output_dir, f"AgentDockSetup-{args.version}-macos-arm64.app.zip")
         if os.path.exists(setup_zip):
@@ -522,7 +532,7 @@ def main(argv: list[str]) -> int:
                                 "sha256": sha256_file(dmg_path)}
 
         release_blocked = [
-            "developer-id-signature-missing：未以 Developer ID 签署发行包（内部二进制可能含工具链 ad-hoc 签名）",
+            "developer-id-signature-missing：app 已做 ad-hoc 资源封装，仍未以 Developer ID 签署发行包",
             "notarization-missing：未做 Apple notarization/stapling",
             "macos-acceptance-evidence-not-attached：构建不会自动附带实机验收记录；发布前须核对对应构件的外部验收证据",
         ]
