@@ -11,6 +11,8 @@ public sealed class OnboardingTests : IDisposable
     private string CodexHome => Path.Combine(root, "codex");
     private string DataHome => Path.Combine(root, "data");
     private string Agents => Path.Combine(CodexHome, "AGENTS.md");
+    private string Delegation => Path.Combine(CodexHome, "AGENTDOCK.md");
+    private string Roles => Path.Combine(CodexHome, "AGENT-ROLES.md");
     private GlobalRouting Store => new(CodexHome, DataHome);
     private string Journal => Path.Combine(DataHome, "onboarding-routing-backup.json");
     private const string ManagedV1 = """
@@ -27,6 +29,11 @@ public sealed class OnboardingTests : IDisposable
         These defaults apply across projects, subject to higher-priority instructions and project-specific restrictions. Send only task-relevant code, documentation and redacted evidence; never send secrets, credentials or unrelated data.
         <!-- external-agent-routing:end -->
         """;
+    private static readonly string ManagedV2 = ManagedV1
+        .Replace("agentdock:managed-v1", "agentdock:managed-v2")
+        .Replace("\n\nThese defaults apply", "\n\n" + """
+            Before each AgentDock MCP start_task, print SUBAGENT_DISPATCH with task_name, agent_type, model and reasoning_effort. Read model and reasoning_effort from AgentDock status.executionProfile.model and status.executionProfile.reasoningEffort; executionProfile.provider identifies the external provider. These fields describe the engine for the next dispatch, not historical tasks. For this external route, use the reported execution profile instead of native Codex agent TOMLs, spawn defaults or the primary model. If an older host omits these fields, verify its actual engine profile and report unknown only for settings that cannot be verified. This reporting rule does not authorize a model or backend change.
+            """ + "\n\nThese defaults apply");
     public OnboardingTests() => Directory.CreateDirectory(CodexHome);
 
     [Fact]
@@ -121,7 +128,7 @@ public sealed class OnboardingTests : IDisposable
         File.AppendAllText(Agents, GlobalRouting.Instructions);
         Assert.NotNull(Store.Inspect().Problem);
         Assert.Throws<InvalidOperationException>(() => Store.Disable());
-        File.WriteAllText(Agents, GlobalRouting.Instructions.Replace("Keep atomic tasks", "Keep custom tasks"));
+        File.WriteAllText(Agents, GlobalRouting.Instructions.Replace("MUST read", "MAY read"));
         Assert.Throws<InvalidOperationException>(() => Store.Disable());
     }
 
@@ -147,23 +154,115 @@ public sealed class OnboardingTests : IDisposable
     }
 
     [Fact]
-    public void New_install_writes_external_profile_reporting_instructions()
+    public void New_install_writes_entry_and_separate_delegation_and_role_documents()
     {
         Store.Enable();
-        var written = File.ReadAllText(Agents);
+        var entry = File.ReadAllText(Agents);
+        Assert.Contains("[AGENTDOCK.md](AGENTDOCK.md)", entry);
+        Assert.Contains("[AGENT-ROLES.md](AGENT-ROLES.md)", entry);
+        Assert.Contains("not from the project working directory", entry);
+        Assert.DoesNotContain("SUBAGENT_DISPATCH", entry);
+        var written = File.ReadAllText(Delegation);
         Assert.Contains("SUBAGENT_DISPATCH", written);
-        Assert.Contains("status.executionProfile.model", written);
-        Assert.Contains("status.executionProfile.reasoningEffort", written);
-        Assert.Contains("instead of native Codex agent TOMLs", written);
+        Assert.Contains("executionProfile.model", written);
+        Assert.Contains("executionProfile.reasoningEffort", written);
+        Assert.Contains("Do not infer them from native agent TOMLs", written);
         Assert.DoesNotContain("deepseek-v4.1-flash", written); // Runtime metadata, not a cached model/version.
+        Assert.Contains("`architect` | Resolve architecture", File.ReadAllText(Roles));
+        Assert.Contains("not model selection or additional execution permissions", File.ReadAllText(Roles));
+    }
+
+    [Fact]
+    public void Companion_documents_are_user_maintained_and_survive_disable()
+    {
+        File.WriteAllText(Delegation, "Custom delegation\r\n", new UTF8Encoding(true));
+        File.WriteAllText(Roles, "Custom roles\r\n", Encoding.Unicode);
+        var delegation = File.ReadAllBytes(Delegation);
+        var roles = File.ReadAllBytes(Roles);
+        Store.Enable();
+        Store.UpgradeEnabled();
+        Store.Disable();
+        Assert.Equal(delegation, File.ReadAllBytes(Delegation));
+        Assert.Equal(roles, File.ReadAllBytes(Roles));
+        Assert.False(File.Exists(Journal));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Startup_upgrade_preserves_original_policy_encoding_and_later_edits(bool replacedPolicy)
+    public void Standalone_user_entry_is_recognized_without_adopting_or_rewriting_it(bool staleJournal)
     {
-        var legacy = ManagedV1.Replace("\n", "\r\n");
+        if (staleJournal) WriteJournal(new() { Path = Agents, WrittenBlock = ManagedV1 });
+        File.WriteAllText(Agents, "User preferences\r\n" + GlobalRouting.EntryInstructions.Replace("\n", "\r\n") + "\r\n", new UTF8Encoding(true));
+        File.WriteAllText(Delegation, "User maintained delegation");
+        File.WriteAllText(Roles, "User maintained roles");
+        var original = File.ReadAllBytes(Agents);
+        var journal = File.Exists(Journal) ? File.ReadAllBytes(Journal) : null;
+        var state = Store.UpgradeEnabled();
+        Assert.True(state.Enabled);
+        Assert.True(state.UserManaged);
+        Assert.Null(state.Problem);
+        Store.Enable();
+        Assert.Throws<InvalidOperationException>(() => Store.Disable());
+        Assert.Equal(original, File.ReadAllBytes(Agents));
+        Assert.Equal(journal, File.Exists(Journal) ? File.ReadAllBytes(Journal) : null);
+    }
+
+    [Theory]
+    [InlineData("AGENTDOCK.md")]
+    [InlineData("AGENT-ROLES.md")]
+    public void Empty_existing_companion_blocks_enable_without_overwriting_files(string name)
+    {
+        File.WriteAllText(Agents, "Original preferences");
+        var path = Path.Combine(CodexHome, name);
+        File.WriteAllText(path, "  \n");
+        Assert.Throws<InvalidOperationException>(() => Store.Enable());
+        Assert.Equal("Original preferences", File.ReadAllText(Agents));
+        Assert.Equal("  \n", File.ReadAllText(path));
+        Assert.False(File.Exists(Journal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Missing_companion_is_reported_for_managed_and_user_entries(bool userManaged)
+    {
+        Store.Enable();
+        if (userManaged) File.WriteAllText(Agents, GlobalRouting.EntryInstructions);
+        File.Delete(Roles);
+        var before = File.ReadAllBytes(Agents);
+        var state = Store.UpgradeEnabled();
+        Assert.False(state.Enabled);
+        Assert.Contains("AGENT-ROLES.md", state.Problem);
+        Assert.Equal(before, File.ReadAllBytes(Agents));
+        Assert.False(File.Exists(Roles));
+    }
+
+    [Theory]
+    [InlineData("duplicate-managed")]
+    [InlineData("duplicate-user")]
+    [InlineData("modified-user")]
+    public void Duplicate_or_modified_standalone_entries_are_rejected(string scenario)
+    {
+        Store.Enable();
+        if (scenario == "duplicate-managed") File.AppendAllText(Agents, "\n" + GlobalRouting.EntryInstructions);
+        else File.WriteAllText(Agents, scenario == "duplicate-user"
+            ? GlobalRouting.EntryInstructions + "\n" + GlobalRouting.EntryInstructions
+            : GlobalRouting.EntryInstructions.Replace("MUST read", "MAY read"));
+        var before = File.ReadAllBytes(Agents);
+        Assert.NotNull(Store.UpgradeEnabled().Problem);
+        Assert.Throws<InvalidOperationException>(() => Store.Enable());
+        Assert.Equal(before, File.ReadAllBytes(Agents));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Startup_upgrade_preserves_original_policy_encoding_and_later_edits(bool replacedPolicy, bool fromV2)
+    {
+        var legacy = (fromV2 ? ManagedV2 : ManagedV1).Replace("\n", "\r\n");
         var previous = replacedPolicy ? "Original external policy" : null;
         var addition = "\r\n" + legacy + "\r\n";
         WriteJournal(new() { Path = Agents, OriginalBlock = previous, WrittenBlock = legacy, AppendedText = replacedPolicy ? null : addition });
@@ -173,7 +272,8 @@ public sealed class OnboardingTests : IDisposable
         Assert.Null(state.Problem);
         var first = File.ReadAllBytes(Agents);
         Assert.True(first.AsSpan().StartsWith(Encoding.UTF8.GetPreamble()));
-        Assert.Contains("status.executionProfile.model", File.ReadAllText(Agents));
+        Assert.Contains("[AGENTDOCK.md](AGENTDOCK.md)", File.ReadAllText(Agents));
+        Assert.Contains("executionProfile.model", File.ReadAllText(Delegation));
         Assert.DoesNotContain("\n", File.ReadAllText(Agents).Replace("\r\n", ""));
         Store.UpgradeEnabled();
         Assert.Equal(first, File.ReadAllBytes(Agents));
@@ -183,17 +283,22 @@ public sealed class OnboardingTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Interrupted_upgrade_resumes_before_or_after_rule_file_write(bool ruleAlreadyWritten)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Interrupted_upgrade_resumes_before_or_after_rule_file_write(bool ruleAlreadyWritten, bool interruptedV2)
     {
-        WriteJournal(new() { Path = Agents, OriginalBlock = null, WrittenBlock = GlobalRouting.Instructions,
-            PreviousWrittenBlock = ManagedV1, AppendedText = "\n" + GlobalRouting.Instructions + "\n" });
-        File.WriteAllText(Agents, "Preserve\n" + (ruleAlreadyWritten ? GlobalRouting.Instructions : ManagedV1) + "\n");
+        Store.Enable(); // Companion documents are written before the entry/journal upgrade.
+        var target = interruptedV2 ? ManagedV2 : GlobalRouting.Instructions;
+        WriteJournal(new() { Path = Agents, OriginalBlock = null, WrittenBlock = target,
+            PreviousWrittenBlock = ManagedV1, AppendedText = "\n" + target + "\n" });
+        File.WriteAllText(Agents, "Preserve\n" + (ruleAlreadyWritten ? target : ManagedV1) + "\n");
         Assert.Null(Store.UpgradeEnabled().Problem);
         var journal = JsonSerializer.Deserialize<GlobalRouting.RoutingBackup>(File.ReadAllBytes(Journal), AgentDock.Core.JsonDefaults.Options)!;
         Assert.Null(journal.PreviousWrittenBlock);
-        Assert.Contains("status.executionProfile.reasoningEffort", File.ReadAllText(Agents));
+        Assert.Contains("agentdock:managed-v3", File.ReadAllText(Agents));
+        Assert.Contains("executionProfile.reasoningEffort", File.ReadAllText(Delegation));
         Store.Disable();
         Assert.Equal("Preserve", File.ReadAllText(Agents));
     }

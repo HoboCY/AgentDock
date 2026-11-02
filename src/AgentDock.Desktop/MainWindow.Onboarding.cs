@@ -220,17 +220,20 @@ public sealed partial class MainWindow
                 _setupBody.Children.Add(Hint("启用后，对所有项目生效：边界清晰、可独立完成的调查、实现、审查和验证任务通过 AgentDock 执行。主代理负责规划、整合和最终验收。"));
                 _setupBody.Children.Add(Hint("保留主模型及登录方式，架构判断仍用原生 architect。浏览器、桌面、应用操作和简单任务由主代理处理。遵守各项目限制，失败时不自动切换模型或重复派发。"));
                 _setupBody.Children.Add(Hint("规则位置：" + _routingStatus?.Path));
+                _setupBody.Children.Add(Hint("全局规则保留入口；委派细则和角色职责分别放在同目录的 AGENTDOCK.md、AGENT-ROLES.md。已有配套文档保持原样，缺失时创建，关闭委派后仍保留。"));
                 if (_routingStatus?.Problem is { } problem) _setupBody.Children.Add(Hint(problem));
-                _setupBody.Children.Add(new Expander { Header = "查看将写入的规则", Content = new TextBox { Text = GlobalRouting.Instructions, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 160 } });
+                _setupBody.Children.Add(new Expander { Header = "查看默认入口与配套文档", Content = new TextBox { Text = GlobalRouting.Instructions + "\n\n--- AGENTDOCK.md ---\n\n" + GlobalRouting.DelegationInstructions + "\n\n--- AGENT-ROLES.md ---\n\n" + GlobalRouting.RoleInstructions, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 160 } });
                 _setupBody.Children.Add(Hint("生效方式：重启 Codex 并新建对话。项目规则仍可能限制委派；此处不会修改主模型、认证和其他规则。"));
-                if (ready[3])
+                if (_routingStatus?.UserManaged == true)
+                    _setupBody.Children.Add(Hint("已识别你手动维护的全局入口；如需关闭，请编辑规则文件中的 Global scope and delegation 段落。"));
+                if (ready[3] && _routingStatus?.UserManaged != true)
                 {
                     var disable = Ui.Button("关闭全局委派并恢复原规则");
                     disable.IsEnabled = !_setupBusy;
                     disable.Click += async (_, _) => await RunSetupActionAsync(() =>
                     {
                         _routingStatus = _routing.Disable();
-                        ShowNotice("全局委派已关闭，原区块已恢复。请重启 Codex 并新建对话。", false);
+                        ShowNotice("全局委派已关闭，原区块已恢复，配套文档已保留。请重启 Codex 并新建对话。", false);
                         return Task.CompletedTask;
                     });
                     _setupBody.Children.Add(disable);

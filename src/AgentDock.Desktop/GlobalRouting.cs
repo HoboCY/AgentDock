@@ -4,7 +4,7 @@ using AgentDock.Core;
 
 namespace AgentDock.Desktop;
 
-public sealed record RoutingStatus(string Path, bool Enabled, string? Problem = null);
+public sealed record RoutingStatus(string Path, bool Enabled, string? Problem = null, bool UserManaged = false);
 
 /// <summary>Owns one marked instruction block. Saves its predecessor before changing the active file.</summary>
 public sealed class GlobalRouting(string codexHome, string dataHome)
@@ -30,10 +30,76 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
         Before each AgentDock MCP start_task, print SUBAGENT_DISPATCH with task_name, agent_type, model and reasoning_effort. Read model and reasoning_effort from AgentDock status.executionProfile.model and status.executionProfile.reasoningEffort; executionProfile.provider identifies the external provider. These fields describe the engine for the next dispatch, not historical tasks. For this external route, use the reported execution profile instead of native Codex agent TOMLs, spawn defaults or the primary model. If an older host omits these fields, verify its actual engine profile and report unknown only for settings that cannot be verified. This reporting rule does not authorize a model or backend change.
         """;
 
-    public static readonly string Instructions = PreviousInstructions
+    private static readonly string InlineInstructions = PreviousInstructions
         .Replace("\r\n", "\n", StringComparison.Ordinal)
         .Replace("<!-- agentdock:managed-v1 -->", "<!-- agentdock:managed-v2 -->", StringComparison.Ordinal)
         .Replace("\n\nThese defaults apply", "\n\n" + DispatchInstructions + "\n\nThese defaults apply", StringComparison.Ordinal);
+
+    public const string EntryInstructions = """
+        ## Global scope and delegation
+
+        These are global defaults. More specific project and directory instructions override conflicting defaults; higher-priority instructions and explicit user requests take precedence. The companion documents below share this global scope.
+
+        - Before choosing roles, planning delegation, or dispatching any native or external subagent, MUST read [AGENT-ROLES.md](AGENT-ROLES.md) and [AGENTDOCK.md](AGENTDOCK.md) in full.
+        - Before monitoring or controlling an existing AgentDock task, MUST read [AGENTDOCK.md](AGENTDOCK.md).
+        - Resolve these links beside this global AGENTS.md, not from the project working directory. The default directory is `~/.codex`, unless `CODEX_HOME` selects another location.
+        - If a required document is missing or unreadable, report its resolved path and continue suitable work in the primary agent. Do not delegate or operate AgentDock until the required documents have been read.
+        """;
+
+    public static readonly string Instructions = Start + "\n<!-- agentdock:managed-v3 -->\n" + EntryInstructions + "\n" + End;
+
+    public const string DelegationInstructions = """
+        # AgentDock delegation
+
+        Apply these global defaults subject to higher-priority instructions, explicit user requests, and applicable project or directory instructions. Role responsibilities are defined in [AGENT-ROLES.md](AGENT-ROLES.md), beside this document.
+
+        ## Routing
+
+        - Keep the primary agent's configured model and ChatGPT authentication. Do not switch models or backends automatically.
+        - Use native `collaboration.spawn_agent` only for `architect`, with its existing role settings.
+        - Send clear, narrowly scoped, independent subtasks for `default`, `explorer`, `worker`, `reviewer`, and `verifier` through AgentDock MCP `start_task`.
+        - The primary agent owns planning, integration, and final verification. Keep atomic tasks, browser, desktop, and app-connector work in the primary agent.
+
+        ## Before each external dispatch
+
+        1. Call `status`. Read `executionProfile.provider`, `executionProfile.model`, and `executionProfile.reasoningEffort` for the next dispatch, not historical tasks. Do not infer them from native agent TOMLs, spawn defaults, or the primary model. If an older host omits these fields, verify its actual engine profile; report unknown only for settings that cannot be verified.
+        2. Print `SUBAGENT_DISPATCH` with `task_name`, `agent_type`, `model`, and `reasoning_effort`. Reporting the execution profile does not authorize a model or backend change.
+        3. Call `start_task` with a short `title`, an existing absolute `cwd`, the selected `role`, a unique `request_id`, and a `prompt` containing the task scope, owned files, and acceptance criteria.
+
+        ## Completion and retries
+
+        - Use `wait_task` or `get_task` with event cursors until every accepted task reaches a terminal state; drain pages while `hasMore` is true. Acceptance or a running state is not completion, and a terminal failure is not success.
+        - Reuse a `request_id` only for an identical retry with unchanged parameters. Failed or interrupted tasks require an explicit new user request before dispatching again.
+        - If AgentDock is unavailable, report the blocker and continue independent work in the primary agent. Do not silently use another backend.
+
+        ## Data boundary
+
+        Send only task-relevant code, documentation, and redacted evidence; never send secrets, credentials, or unrelated data. Role instructions do not grant permissions beyond the host's actual access controls.
+
+        ## Maintenance
+
+        This standalone file is user-maintained. AgentDock creates missing companion documents when enabling or upgrading its managed entry, preserves existing documents, and keeps them when disabling that entry.
+        """;
+
+    public const string RoleInstructions = """
+        # Subagent roles
+
+        Choose only roles relevant to the task. Use [AGENTDOCK.md](AGENTDOCK.md) for execution routes, model configuration, primary-agent responsibilities, and task lifecycle. Resolve this link beside this document.
+
+        | Role | Responsibility |
+        | --- | --- |
+        | `explorer` | Investigate behavior and locate code paths. |
+        | `architect` | Resolve architecture and design decisions. |
+        | `worker` | Implement features, fixes, and refactoring. |
+        | `reviewer` | Independently review correctness and regressions. |
+        | `verifier` | Run tests, builds, and runtime validation. |
+        | `default` | Handle other clearly bounded tasks. |
+
+        Role names define responsibilities, not model selection or additional execution permissions.
+        """;
+
+    private static readonly (string Name, string Content)[] Documents =
+        [("AGENTDOCK.md", DelegationInstructions), ("AGENT-ROLES.md", RoleInstructions)];
 
     private const string Transitional = """
         <!-- external-agent-routing:start -->
@@ -64,11 +130,22 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
             path = ActivePath;
             var snapshot = Read(path);
             var block = FindBlock(snapshot.Text);
+            var outside = "\n" + Normalize(block is null ? snapshot.Text : snapshot.Text.Replace(block, "", StringComparison.Ordinal)) + "\n";
+            const string heading = "\n## Global scope and delegation\n";
+            if (outside.Contains(heading, StringComparison.Ordinal))
+            {
+                if (block is not null || !outside.Contains(Normalize(EntryInstructions), StringComparison.Ordinal) ||
+                    outside.IndexOf(heading, StringComparison.Ordinal) != outside.LastIndexOf(heading, StringComparison.Ordinal))
+                    throw new InvalidOperationException("全局入口重复或已被修改，请先检查冲突。");
+                CheckDocuments();
+                return new(path, true, UserManaged: true);
+            }
             var backup = LoadBackup();
             if (backup is not null && !SamePath(backup.Path, path))
                 return new(path, false, "生效的全局规则文件已变化。请先处理原文件中的 AgentDock 规则，再重新配置。");
             if (block is null) return new(path, false);
             var own = IsManaged(block);
+            if (Normalize(block) == Normalize(Instructions)) CheckDocuments();
             if (own && backup is null) return new(path, true, "规则已启用，但恢复记录缺失；关闭前需人工检查原规则。");
             if (own && backup is not null && block != backup.WrittenBlock && block != backup.PreviousWrittenBlock)
                 return new(path, true, "恢复记录与当前规则不同，已保留文件，请先检查上次配置结果。");
@@ -84,7 +161,7 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
     public RoutingStatus UpgradeEnabled()
     {
         var state = Inspect();
-        if (!state.Enabled || state.Problem is not null) return state;
+        if (!state.Enabled || state.Problem is not null || state.UserManaged) return state;
         try
         {
             var snapshot = Read(state.Path);
@@ -92,23 +169,22 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
             var backup = LoadBackup() ?? throw new InvalidOperationException("规则恢复记录已变化，请刷新后检查。");
             if (!SamePath(backup.Path, state.Path) || old is null || !IsManaged(old) ||
                 !IsManaged(backup.WrittenBlock) ||
-                (backup.PreviousWrittenBlock is not null && Normalize(backup.PreviousWrittenBlock) != Normalize(PreviousInstructions)) ||
+                (backup.PreviousWrittenBlock is not null && !IsManaged(backup.PreviousWrittenBlock)) ||
                 (old != backup.WrittenBlock && old != backup.PreviousWrittenBlock))
                 throw new InvalidOperationException("规则或恢复记录在检查后发生变化，已保留文件，请刷新后检查。");
 
             var written = Instructions.Replace("\n", snapshot.NewLine);
             if (Normalize(old) == Normalize(Instructions) && backup.PreviousWrittenBlock is null) return state;
-            if (backup.PreviousWrittenBlock is null)
+            CreateMissingDocuments();
+            if (backup.WrittenBlock != written || backup.PreviousWrittenBlock is null)
             {
                 // Journal both versions before replacing the file so an interrupted upgrade can resume.
+                if (backup.AppendedText is not null)
+                    backup.AppendedText = backup.AppendedText.Replace(backup.WrittenBlock, written, StringComparison.Ordinal);
                 backup.PreviousWrittenBlock = old;
                 backup.WrittenBlock = written;
-                if (backup.AppendedText is not null)
-                    backup.AppendedText = backup.AppendedText.Replace(old, written, StringComparison.Ordinal);
                 AtomicJson.Write(BackupPath, backup);
             }
-            else if (backup.WrittenBlock != written)
-                throw new InvalidOperationException("待恢复的规则版本不匹配，已保留文件，请检查恢复记录。");
 
             if (old != written) Write(snapshot, snapshot.Text.Replace(old, written, StringComparison.Ordinal));
             backup.PreviousWrittenBlock = null;
@@ -136,6 +212,7 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
             throw new InvalidOperationException("恢复记录与当前规则不同，请先检查上次配置结果。");
         var addition = (snapshot.Text.Length == 0 || snapshot.Text.EndsWith('\n') ? "" : snapshot.NewLine) + written + snapshot.NewLine;
         backup ??= new RoutingBackup { Path = state.Path, OriginalBlock = old, WrittenBlock = written, AppendedText = old is null ? addition : null };
+        CreateMissingDocuments();
         AtomicJson.Write(BackupPath, backup);
         var next = old is null
             ? snapshot.Text + addition
@@ -148,6 +225,7 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
     {
         var state = UpgradeEnabled();
         if (state.Problem is not null) throw new InvalidOperationException(state.Problem);
+        if (state.UserManaged) throw new InvalidOperationException("当前入口由你手动维护；如需关闭，请编辑全局规则中的 Global scope and delegation 段落。");
         var backup = LoadBackup();
         if (backup is null) return state;
         var snapshot = Read(state.Path);
@@ -188,9 +266,27 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
     }
 
     private static string Normalize(string value) => value.Replace("\r\n", "\n").Trim();
-    private static bool IsManaged(string value) => Normalize(value) == Normalize(Instructions) || Normalize(value) == Normalize(PreviousInstructions);
+    private static bool IsManaged(string value) => Normalize(value) == Normalize(Instructions) ||
+        Normalize(value) == Normalize(InlineInstructions) || Normalize(value) == Normalize(PreviousInstructions);
     private static bool SamePath(string left, string right) => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private void CheckDocuments()
+    {
+        foreach (var (name, _) in Documents)
+            if (string.IsNullOrWhiteSpace(Read(Path.Combine(codexHome, name)).Text))
+                throw new InvalidOperationException($"配套文档缺失或为空：{Path.Combine(codexHome, name)}。请补齐后重新检查。");
+    }
+
+    private void CreateMissingDocuments()
+    {
+        var snapshots = Documents.Select(document => (Snapshot: Read(Path.Combine(codexHome, document.Name)), document.Content)).ToArray();
+        foreach (var (snapshot, _) in snapshots)
+            if (File.Exists(snapshot.Path) && string.IsNullOrWhiteSpace(snapshot.Text))
+                throw new InvalidOperationException($"已有配套文档为空，已保留文件：{snapshot.Path}。请补齐后重新检查。");
+        foreach (var (snapshot, content) in snapshots)
+            if (!File.Exists(snapshot.Path)) Write(snapshot, content + "\n", overwrite: false);
+    }
 
     private sealed record Snapshot(string Path, byte[] Bytes, string Text, Encoding Encoding, bool HasPreamble)
     {
@@ -208,7 +304,7 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
         return new(path, bytes, text, encoding, preamble.Length > 0 && bytes.AsSpan().StartsWith(preamble));
     }
 
-    private static void Write(Snapshot snapshot, string text)
+    private static void Write(Snapshot snapshot, string text, bool overwrite = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(snapshot.Path)!);
         var temporary = snapshot.Path + ".agentdock-" + Guid.NewGuid().ToString("N") + ".tmp";
@@ -223,7 +319,7 @@ public sealed class GlobalRouting(string codexHome, string dataHome)
             var current = File.Exists(snapshot.Path) ? File.ReadAllBytes(snapshot.Path) : [];
             if (!current.AsSpan().SequenceEqual(snapshot.Bytes))
                 throw new InvalidOperationException("规则文件在配置期间发生变化，请刷新后重试。");
-            File.Move(temporary, snapshot.Path, overwrite: true);
+            File.Move(temporary, snapshot.Path, overwrite);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }

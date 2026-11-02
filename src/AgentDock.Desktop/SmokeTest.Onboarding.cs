@@ -81,9 +81,13 @@ public static partial class SmokeTest
         var routing = new GlobalRouting(codexHome, app.State.Api.Client.Home);
         if (!routing.Inspect().Enabled) throw new InvalidOperationException("Completing setup must persist the global rule.");
         checks.Add("codex-cli-registration-and-guide-completion");
-        var rule = File.ReadAllText(routing.Inspect().Path);
-        if (!rule.Contains("status.executionProfile.model", StringComparison.Ordinal) ||
-            !rule.Contains("status.executionProfile.reasoningEffort", StringComparison.Ordinal) ||
+        var entry = File.ReadAllText(routing.Inspect().Path);
+        var rule = File.ReadAllText(Path.Combine(codexHome, "AGENTDOCK.md"));
+        if (!entry.Contains("[AGENTDOCK.md](AGENTDOCK.md)", StringComparison.Ordinal) ||
+            !entry.Contains("[AGENT-ROLES.md](AGENT-ROLES.md)", StringComparison.Ordinal) ||
+            !File.Exists(Path.Combine(codexHome, "AGENT-ROLES.md")) ||
+            !rule.Contains("executionProfile.model", StringComparison.Ordinal) ||
+            !rule.Contains("executionProfile.reasoningEffort", StringComparison.Ordinal) ||
             app.State.Host?.ExecutionProfile is not { Provider.Length: > 0, Model.Length: > 0, ReasoningEffort.Length: > 0 })
             throw new InvalidOperationException("The guide must persist dispatch reporting instructions backed by live host metadata.");
         checks.Add("dispatch-rule-and-live-host-execution-profile");
