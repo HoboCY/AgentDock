@@ -48,12 +48,16 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               output.write('VERSION=' + version + '\n')
           lock = json.loads(Path('packaging/mac/runtime-lock.json').read_text())
+          # Hosted runners may also have newer SDK patches installed.
+          Path('global.json').write_text(json.dumps({'sdk': {'version': lock['dotnet']['sdk'], 'rollForward': 'disable'}}) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sdk=' + lock['dotnet']['sdk'] + '\n')
           PY
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ steps.version.outputs.sdk }}
+      - name: 确认使用锁定的 SDK
+        run: test "$(dotnet --version)" = "${{ steps.version.outputs.sdk }}"
       - name: 获取并校验固定运行时
         run: |
           python3 scripts/Test-MacRelease.py

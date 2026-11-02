@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Run the workflow's actual publisher with a fake gh; no network or release writes."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -19,6 +21,25 @@ BASH = str(Path(shutil.which('git')).resolve().parents[1] / 'bin/bash.exe') if o
 
 
 class PublishTests(unittest.TestCase):
+    def test_mac_preflight_disables_sdk_patch_rollforward(self):
+        repo = Path(__file__).resolve().parent.parent
+        workflow = (repo / '.github/workflows/package-macos.yml').read_text(encoding='utf-8')
+        script = textwrap.dedent(re.search(r"(?ms)^          python3 - <<'PY'\n(.*?)^          PY$", workflow).group(1))
+        with tempfile.TemporaryDirectory(prefix='agentdock-sdk-') as directory:
+            root = Path(directory)
+            lock = root / 'packaging/mac/runtime-lock.json'
+            lock.parent.mkdir(parents=True)
+            shutil.copyfile(repo / 'packaging/mac/runtime-lock.json', lock)
+            shutil.copyfile(repo / 'global.json', root / 'global.json')
+            env = dict(os.environ, VERSION_INPUT='0.1.1-beta.4', GITHUB_REF_TYPE='branch',
+                       GITHUB_ENV=str(root / 'env'), GITHUB_OUTPUT=str(root / 'output'))
+            result = subprocess.run([sys.executable, '-c', script], cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = json.loads(lock.read_text())['dotnet']['sdk']
+            self.assertEqual(json.loads((root / 'global.json').read_text())['sdk'],
+                             {'version': expected, 'rollForward': 'disable'})
+            self.assertIn('sdk=' + expected, (root / 'output').read_text())
+
     def run_case(self, *, draft='true', tag='expected', upload_exit='0', corrupt=False):
         with tempfile.TemporaryDirectory(prefix='agentdock-publish-') as directory:
             root = Path(directory)
