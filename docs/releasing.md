@@ -2,7 +2,9 @@
 
 `package` 是统一发版入口：一个版本标签同时构建 Windows x64 EXE 和 Apple Silicon macOS arm64 DMG，两边测试、完整性检查及安装门禁全部通过后，才创建同一个 GitHub Release。任一平台失败，都不会只发布另一平台。
 
-Mac 构建复用 `package-macos` 原生工作流，通过 [workflow_call](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) 从同一提交调用，标签不会再触发独立的重复 Mac 构建。当前仅支持带测试后缀的版本，例如 `v0.1.1-beta.3`；Mac 包仍未签名/公证，作为明确标注限制的预发布附件，不表示稳定版验收通过。暂不支持稳定标签或 Intel Mac 安装包。
+Mac 构建复用 `package-macos` 原生工作流，通过 [workflow_call](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) 从同一提交调用，标签不会再触发独立的重复 Mac 构建。当前仅支持带测试后缀的版本，例如 `v0.1.0-beta.1`；Mac 包仍未签名/公证，作为明确标注限制的预发布附件，不表示稳定版验收通过。暂不支持稳定标签或 Intel Mac 安装包。
+
+按维护者 2026-11-02 的决定，公开 Release 从 `v0.1.0-beta.1` 重新编号；新版本公开并核验后移除旧公开 Release，旧 Git 标签及提交保留供追溯。
 
 ## 创建测试版
 
@@ -10,15 +12,15 @@ Mac 构建复用 `package-macos` 原生工作流，通过 [workflow_call](https:
 2. 给已确认的提交打测试标签并推送，例如：
 
    ```powershell
-   git tag -a v0.1.1-beta.3 <已确认的提交SHA> -m 'AgentDock 0.1.1 beta 3'
-   git push origin v0.1.1-beta.3
+   git tag -a v0.1.0-beta.1 <已确认的提交SHA> -m 'AgentDock 0.1.0 beta 1'
+   git push origin v0.1.0-beta.1
    ```
 
 3. 标签推送会并行构建两个平台，全部通过后创建 **Draft + Pre-release**，草稿同时包含 EXE 和 DMG。核对附件与说明后，在 GitHub Releases 编辑该草稿，保持 Pre-release 并发布。
 4. 如标签尚无 Release，且需要由 Action 直接公开发布，使用 GitHub CLI 的 `--ref` 指定已有测试标签（网页 Run workflow 的选择器主要用于分支）：
 
    ```powershell
-   gh workflow run package.yml --repo HoboCY/AgentDock --ref v0.1.1-beta.3 -f release=true -f draft=false
+   gh workflow run package.yml --repo HoboCY/AgentDock --ref v0.1.0-beta.1 -f release=true -f draft=false
    ```
 
    `version` 留空，或填写标签去掉 `v` 后的版本。自动公开也会先创建草稿，所有附件上传成功后才公开；上传失败保留草稿。已有 Release 时创建操作会失败，不覆盖附件；标签推送通常已生成草稿，此时直接发布该草稿。标签选择语义见 [gh workflow run 文档](https://cli.github.com/manual/gh_workflow_run)。
@@ -26,17 +28,17 @@ Mac 构建复用 `package-macos` 原生工作流，通过 [workflow_call](https:
 普通 main/PR 只做 Windows 检查；手动运行 `package` 会构建两个平台。未勾选 `release` 时只保留 Actions artifacts，不创建或修改 Release，可用于双平台演练：
 
 ```powershell
-gh workflow run package.yml --repo HoboCY/AgentDock --ref main -f version=0.1.1-ci.20261021
+gh workflow run package.yml --repo HoboCY/AgentDock --ref main -f version=0.1.0-ci.20261102
 ```
 
-在该次运行的 `agentdock-release-bundle-<run_id>` 下载两个安装包、清单和校验文件。`package-macos` 仍可单独手动运行做 Mac 检查，但不创建 Release。创建 Release 的 job 单独获得 `contents: write`，无需添加 PAT、模型凭据或签名密钥。使用 `--verify-tag` 防止自动从默认分支创建标签；预发布不标为 Latest。参数语义见 [GitHub CLI 文档](https://cli.github.com/manual/gh_release_create)。
+在该次运行的 `agentdock-release-bundle-<run_id>` 下载两个安装包。构建清单、校验文件和生成的说明保留在各平台的内部 Actions artifact 中，不进入最终下载包或 Release 附件。`package-macos` 仍可单独手动运行做 Mac 检查，但不创建 Release。创建 Release 的 job 单独获得 `contents: write`，无需添加 PAT、模型凭据或签名密钥。使用 `--verify-tag` 防止自动从默认分支创建标签；预发布不标为 Latest。参数语义见 [GitHub CLI 文档](https://cli.github.com/manual/gh_release_create)。
 
 ## 附件与门禁
 
 - Windows 用户下载 `AgentDockSetup-<版本>-win-x64.exe`，Apple Silicon Mac 用户下载 `AgentDockSetup-<版本>-macos-arm64.dmg`；两个安装器均内置完整程序包，不需要另外下载或复制 payload ZIP。
-- 两份原始构建清单分别发布为 `package-manifest-win-x64.json` 和 `package-manifest-macos-arm64.json`，避免重名。保留组件信息、哈希及 `releaseReady`/`releaseBlocked`，不把构建成功改写为稳定发行就绪。
-- JSON 清单和 `SHA256SUMS.txt` 是可选维护资料，普通安装无需下载或编辑。安装器内的 `payload-manifest.json` 仍用于逐文件完整性校验。
-- `SHA256SUMS.txt` 覆盖两个安装包与两份清单；汇总 job 在下载构建产物后再次校验。公开附件固定为这五个文件，构建中间产物不进入 Release。
+- 两份原始构建清单在内部汇总时分别命名为 `package-manifest-win-x64.json` 和 `package-manifest-macos-arm64.json`，避免重名。保留组件信息、哈希及 `releaseReady`/`releaseBlocked`，不把构建成功改写为稳定发行就绪。
+- 内部 `SHA256SUMS.txt` 覆盖两个安装包与两份清单；汇总 job 在下载构建产物后再次校验。安装器内的 `payload-manifest.json` 继续用于逐文件完整性校验。
+- 公开上传附件和最终下载包固定为 EXE、DMG 两个文件，不包含 JSON、校验文件、独立 ZIP 或说明文件。
 
 发布前运行 .NET 回归、完整包构建、内置 Git 哈希检查及隔离安装门禁。额外检查平台、构建版本、Host 版本、自包含状态、必需组件、文件名、体积与 SHA-256；partial 包、缺少安装器、版本不匹配和损坏附件均拒绝发布。仅上传固定附件，不递归发布整个工作区或构建目录。
 

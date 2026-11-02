@@ -68,14 +68,22 @@ class PublishTests(unittest.TestCase):
             calls = (root / 'calls.txt').read_text().splitlines() if (root / 'calls.txt').exists() else []
             return result.returncode, calls, result.stderr
 
-    def test_draft_contains_both_installers_and_stays_private(self):
+    def test_draft_contains_only_both_installers_and_stays_private(self):
         code, calls, error = self.run_case()
         self.assertEqual(code, 0, error)
         create = next(call for call in calls if call.startswith('release create '))
         for argument in ['--draft', '--verify-tag', '--prerelease', '--latest=false',
                          'AgentDockSetup-0.1.1-beta.3-win-x64.exe', 'AgentDockSetup-0.1.1-beta.3-macos-arm64.dmg']:
             self.assertIn(argument, create.split())
+        arguments = create.split()
+        self.assertEqual(arguments[3:arguments.index('--verify-tag')],
+                         ['AgentDockSetup-0.1.1-beta.3-win-x64.exe', 'AgentDockSetup-0.1.1-beta.3-macos-arm64.dmg'])
         self.assertFalse(any(call.startswith('release edit ') for call in calls))
+
+    def test_download_bundle_contains_only_installers(self):
+        paths = re.search(r'(?ms)name: agentdock-release-bundle-.*?^          path: \|\n(.*?)^          if-no-files-found:',
+                          WORKFLOW).group(1)
+        self.assertEqual(paths.split(), ['release/*.exe', 'release/*.dmg'])
 
     def test_public_only_after_upload(self):
         code, calls, error = self.run_case(draft='false')

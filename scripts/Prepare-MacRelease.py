@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a native Mac build and stage only its public preview attachments."""
+"""Validate a native Mac build and stage its installer, verification data and notes."""
 import argparse
 import hashlib
 import json
@@ -71,7 +71,7 @@ def prepare_release(version, package, output):
 
 本候选未签名、未公证，下载运行可能被 Gatekeeper 拦截，尚未完成真实下载验收。不推荐关闭 Gatekeeper 或删除隔离标记来绕过检查；稳定发布仍保留签名、公证和真实下载验收要求。
 
-`{manifest_name}` 和 `SHA256SUMS.txt` 是可选校验资料。原始构建清单 releaseReady=false，releaseBlocked:
+原始构建清单 releaseReady=false，releaseBlocked:
 {chr(10).join('- ' + item for item in blockers)}
 '''
     output.mkdir(parents=True)

@@ -222,9 +222,6 @@ jobs:
           path: |
             release/*.exe
             release/*.dmg
-            release/package-manifest-*.json
-            release/SHA256SUMS.txt
-            release/release-notes.md
           if-no-files-found: error
           retention-days: 14
 
@@ -246,7 +243,6 @@ jobs:
           gh release create "v$RELEASE_VERSION" \
             "AgentDockSetup-$RELEASE_VERSION-win-x64.exe" \
             "AgentDockSetup-$RELEASE_VERSION-macos-arm64.dmg" \
-            package-manifest-win-x64.json package-manifest-macos-arm64.json SHA256SUMS.txt \
             --verify-tag --prerelease --latest=false --draft \
             --title "AgentDock $RELEASE_VERSION (Windows + macOS preview)" \
             --notes-file release-notes.md

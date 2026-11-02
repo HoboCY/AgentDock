@@ -63,8 +63,6 @@ Windows x64 测试版，尚未达到稳定发行条件。程序未进行发行�
 
 只需下载并运行 AgentDockSetup-$Version-win-x64.exe，点击“安装 / 应用更新”。完整程序、固定运行时及 Codex 插件源均已内置，无需另行下载 ZIP 或手工复制文件。安装与接入说明见仓库 docs/installation.md。
 
-package-manifest-win-x64.json 和 SHA256SUMS.txt 为可选的构建信息与校验资料，普通安装无需下载或编辑。
-
 构建已通过自动化回归、完整包校验与隔离安装门禁。这不替代该版本在干净系统上的真实下载、首次配置、桌面交互和真实模型任务验收。
 
 清单 releaseReady=$($manifest.releaseReady.ToString().ToLowerInvariant())，构建器保留的发行阻塞项：
