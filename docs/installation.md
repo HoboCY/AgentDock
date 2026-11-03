@@ -38,11 +38,19 @@ Release 只提供 Windows EXE 和 Mac DMG，按系统选择一个即可。无需
 5. 凭据已存在时可直接继续，输入新值才会替换。保存后立即刷新状态并清空输入；“已保存”仅确认本机存储，不代表 API Key 有效或未过期。是否可执行以真实任务结果为准。**AgentDock 全新配置，不迁移旧凭据或角色**；系统登录自启默认关闭。
 6. 引导通过 Codex 命令工具注册本机插件，配置完成后仍可日常使用 ChatGPT / Codex 桌面 App。macOS 会查找 PATH、系统及用户“应用程序”目录中的 `ChatGPT.app`、`Codex.app`、用户本地 CLI 和 Homebrew 安装位置；这些位置没有命令工具时，还会查找 `NVM_DIR`（默认 `~/.nvm`）下 `versions/node/v*/bin/codex`，优先使用包含 Codex 的最新 Node 版本。手动选择 `.app` 仅在其中包含命令工具时有效，也可直接选择现有的 `codex` 文件。启动 nvm 命令工具时，AgentDock 为该子进程补充同目录 Node 的查找路径，不修改系统或终端配置。
 
-   CLI 与桌面 App 需要使用同一份 Codex 配置目录。插件状态显示“已注册并启用”，并不代表桌面 App 当前对话已经载入工具；配置后重启桌面 App 并新建对话，在 App 中验证 AgentDock 工具。官方说明见 [本地插件与桌面 App](https://developers.openai.com/plugins/build/plugins#how-local-marketplaces-work)。
+   CLI 与桌面 App 需要使用同一份 Codex 配置目录。选择「接入并授权」时，会明确授权 Codex 通过 AgentDock 启动任务（`start_task`）；任务可能向已配置的模型渠道发送必要的代码和脱敏证据、产生 API 费用，实现类任务可修改指定项目。也可选择「仅接入，保留审批」，以后从该步骤补做授权或「恢复逐次询问」。授权仅保存该工具的审批设置，保留其他工具、全局审批、主模型和登录方式。
+
+   「已接入」与「已授权」分别检查。它们不代表桌面 App 当前对话已载入新配置；保存后重启桌面 App 并新建对话验证 AgentDock 工具。组织或项目限制仍有效，配置无法保存或回读不一致时会提示处理。官方说明见 [本地插件的工具审批配置](https://developers.openai.com/plugins/build/plugins#configure-installed-server-policy)。
 
 全局委派首次仅在点击「启用全局委派并完成」时启用：优先使用 `CODEX_HOME`（默认 `~/.codex`）中非空的 `AGENTS.override.md`，否则使用 `AGENTS.md`，不会新建覆盖文件。受控区块之外的内容保留；可从引导最后一步「关闭全局委派并恢复原规则」。恢复记录保存在 AgentDock 数据目录 `onboarding-routing-backup.json`，引导完成记录在 `onboarding.json`。
 
 全局规则只写入 `Global scope and delegation` 入口（managed-v3），要求先完整读取同目录的 `AGENTDOCK.md`（委派与任务生命周期）和 `AGENT-ROLES.md`（角色职责）。启用或升级时仅创建缺失的配套文档，已有文档由用户维护，不覆盖；关闭只恢复入口，保留两份文档。已有空白或不可读文档会提示处理。链接始终相对于全局配置目录，而非项目工作目录。
+
+插件附带一个 `SessionStart` hook，覆盖新聊天、恢复、清空、压缩续接和分支聊天。它按相同的全局文件优先级读取入口，再加载两份配套文档；关闭全局委派后，后续触发不再加载保留的文档。缺少或读不到配套文档时提示检查，不输出部分委派细则。Windows 使用自带 PowerShell，macOS 使用系统 sh，不需要另装 Node 或 Python。
+
+首次安装带 hook 的插件后，在 Codex 的「Review hooks」或「设置 → Hooks」审阅并信任 AgentDock；CLI 可输入 `/hooks`。信任后同一插件版本在重启、新聊天及恢复时持续使用。**插件升级或脚本变化可能要求再次审阅**：当前 Codex 也校验插件包内容，仅保持脚本不变不能保证跨版本免确认。AgentDock 不自动填写信任记录。hook 只提供规则上下文，任务授权仍由第 3 步单独保存，组织/项目限制仍有效。详见 [Codex hook 信任机制](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)。
+
+已有安装升级后，进入「设置 → 打开配置引导 → 接入 Codex」，点击继续或授权按钮刷新插件，再完成引导并重启 Codex。仅重启不会更新 Codex 已缓存的旧插件；第 3 步会重新运行官方插件注册流程，让新增 hook 随新版本载入。
 
 启动主面板或重新检查配置时，会将已启用、内容完整且恢复记录匹配的 managed-v1/v2 内联规则升级为上述结构；未启用或已关闭的规则不会自动开启。升级保留原区块、文件编码和换行，并可在中断后继续恢复。新版派发说明通过后台 `status.executionProfile` 读取实际模型和推理强度，不套用 Codex 原生子代理 TOML。旧后台没有这些字段时，只有核实执行配置后才能填值，不能凭主模型猜测。
 
@@ -146,6 +154,7 @@ AgentDockSetup-<新版本>-win-x64.exe --apply-update --payload "<新 zip 路径
 | 启动报“未找到配套后台程序” | 使用完整安装包重装；partial 构建不含 Host |
 | 插件启动失败：找不到路径 / HostMissing | 先完成 AgentDock 安装，再重跑 `codex plugin marketplace add` + `codex plugin add`，让插件缓存包含 `runtime/AgentDock.Host.exe` 与 `runtime/install.json`；然后新建对话 |
 | Codex 中看不到 agentdock 工具 | 确认 `codex plugin list` 已安装、已新建对话或重启 Codex |
+| 后台已连接，但 `start_task` 提示高风险并要求授权 | 在「设置 → 打开配置引导 → 接入 Codex」阅读授权范围并点击「授权派发并继续」；保存后重启 Codex、新建对话。后台连通与任务派发授权是独立状态；组织或项目强制策略仍须遵守 |
 | 安装程序提示缺少内置 Git | 该 payload 不含 `engines/git/usr/bin/sh.exe`（非完整包）；使用官方完整安装包重新安装，无需另装 Git |
 | 更新/安装/卸载被拒绝 | 存在排队/运行/暂停任务、后台状态不明或更新标记冲突（fail closed）；等任务结束后重试，必要时按提示清理过期标记 |
 | 安装包提示 partial / 缺少组件 | 该构建未包含 Host/Desktop/Engine，属于开发自检包，不能用于正式安装 |

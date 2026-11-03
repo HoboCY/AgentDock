@@ -4,10 +4,11 @@ using AgentDock.Core;
 
 namespace AgentDock.Desktop;
 
-public sealed record CodexConnection(string? Executable, bool Registered, string Message);
+public sealed record CodexConnection(string? Executable, bool Registered, string Message,
+    bool TaskStartApproved = false, string? ApprovalProblem = null);
 
-/// <summary>Uses the supported plugin CLI; never rewrites the user's TOML or authentication.</summary>
-public sealed class CodexIntegration
+/// <summary>Uses Codex's plugin CLI and config API; preserves unrelated settings and authentication.</summary>
+public sealed partial class CodexIntegration
 {
     public string CodexHome { get; }
     public string Marketplace { get; }
@@ -36,7 +37,10 @@ public sealed class CodexIntegration
                 ? "所选应用包中未找到 Codex 命令程序。请选择包含 Codex 的 ChatGPT/Codex 应用，或直接选择 codex 命令文件。"
                 : "未找到 Codex 命令程序。请选择已安装的 ChatGPT/Codex 应用，或直接选择 codex 命令文件。");
         var json = await RunAsync(["plugin", "list", "--json"], ct);
-        return ParseStatus(json, Executable, Marketplace);
+        var state = ParseStatus(json, Executable, Marketplace);
+        if (!state.Registered) return state;
+        try { return state with { TaskStartApproved = await InspectTaskApprovalAsync(ct) }; }
+        catch (InvalidOperationException error) { return state with { ApprovalProblem = error.Message }; }
     }
 
     public async Task<CodexConnection> RegisterAsync(CancellationToken ct)

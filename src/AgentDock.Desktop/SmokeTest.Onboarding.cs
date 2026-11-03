@@ -1,4 +1,5 @@
 using AgentDock.Core;
+using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -73,11 +74,29 @@ public static partial class SmokeTest
         checks.Add("wizard-validates-empty-key-and-clears-saved-key");
 
         ClickSetup(main, "3  接入 Codex");
-        ClickSetup(main, "接入 Codex 并继续");
+        _ = SetupButton(main, "接入并授权");
+        ClickSetup(main, "仅接入，保留审批");
         await UntilAsync(() => main.GetVisualDescendants().OfType<Button>().Any(b => Equals(b.Content, "启用全局委派并完成") && b.IsEnabled));
+        var codexHome = Environment.GetEnvironmentVariable("CODEX_HOME")!;
+        var integration = new CodexIntegration(app.State.Api.Client.Home, codexHome);
+        if (await integration.InspectTaskApprovalAsync(CancellationToken.None))
+            throw new InvalidOperationException("Registration without consent must not grant task approval.");
+        var pluginManifest = Path.Combine(integration.Marketplace, "plugins", "agentdock", ".codex-plugin", "plugin.json");
+        var upgradedPlugin = JsonNode.Parse(File.ReadAllText(pluginManifest))!;
+        const string upgradeVersion = "0.0.1-hook-smoke";
+        upgradedPlugin["version"] = upgradeVersion;
+        File.WriteAllText(pluginManifest, upgradedPlugin.ToJsonString());
+        ClickSetup(main, "3  接入 Codex");
+        ClickSetup(main, "授权派发并继续");
+        await UntilAsync(() => main.GetVisualDescendants().OfType<Button>().Any(b => Equals(b.Content, "启用全局委派并完成") && b.IsEnabled));
+        if (!await integration.InspectTaskApprovalAsync(CancellationToken.None))
+            throw new InvalidOperationException("Explicit setup consent must persist start_task approval.");
+        checks.Add("registration-keeps-approval-until-explicit-consent");
+        if (!File.Exists(Path.Combine(codexHome, "plugins", "cache", "agentdock-local", "agentdock", upgradeVersion, "hooks", "hooks.json")))
+            throw new InvalidOperationException("Reconnecting an installed plugin must refresh its version and load the new hooks.");
+        checks.Add("reconnect-refreshes-installed-plugin-hooks");
         ClickSetup(main, "启用全局委派并完成");
         await UntilAsync(() => tabs.SelectedIndex == 0 && OnboardingProgress.IsComplete(app.State.Api.Client.Home));
-        var codexHome = Environment.GetEnvironmentVariable("CODEX_HOME")!;
         var routing = new GlobalRouting(codexHome, app.State.Api.Client.Home);
         if (!routing.Inspect().Enabled) throw new InvalidOperationException("Completing setup must persist the global rule.");
         checks.Add("codex-cli-registration-and-guide-completion");
@@ -95,6 +114,12 @@ public static partial class SmokeTest
         await Task.Delay(200);
         ClickSetup(main, "打开配置引导");
         await UntilAsync(() => SetupButton(main, "重新检查").IsEnabled);
+        ClickSetup(main, "3  接入 Codex");
+        ClickSetup(main, "恢复逐次询问");
+        await UntilAsync(() => main.GetVisualDescendants().OfType<Button>().Any(b => Equals(b.Content, "授权派发并继续") && b.IsEnabled));
+        if (await integration.InspectTaskApprovalAsync(CancellationToken.None))
+            throw new InvalidOperationException("Revoking setup consent must persist prompt mode.");
+        checks.Add("task-approval-can-be-revoked-from-guide");
         ClickSetup(main, "4  启用委派");
         ClickSetup(main, "关闭全局委派并恢复原规则");
         await UntilAsync(() => !routing.Inspect().Enabled);

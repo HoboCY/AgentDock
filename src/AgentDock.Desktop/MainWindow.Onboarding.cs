@@ -86,7 +86,7 @@ public sealed partial class MainWindow
         try { _codexStatus = await _codex.InspectAsync(_state.Token); }
         finally
         {
-            if (chooseStep) _setupStep = !_state.HostReachable ? 0 : _state.Configuration?.CredentialConfigured != true ? 1 : _codexStatus?.Registered != true ? 2 : 3;
+            if (chooseStep) _setupStep = !_state.HostReachable ? 0 : _state.Configuration?.CredentialConfigured != true ? 1 : _codexStatus is not { Registered: true, TaskStartApproved: true } ? 2 : 3;
             RenderSetup();
         }
     }
@@ -110,8 +110,7 @@ public sealed partial class MainWindow
                 _setupStep = 2;
                 break;
             case 2:
-                if (_codexStatus?.Registered != true) _codexStatus = await _codex.RegisterAsync(_state.Token);
-                _setupStep = 3;
+                await ConnectCodexAsync(authorize: true);
                 break;
             case 3:
                 await CheckSetupAsync(false);
@@ -122,9 +121,18 @@ public sealed partial class MainWindow
                     throw new InvalidOperationException(_routingStatus.Problem ?? "全局规则未生效，请刷新后检查。");
                 OnboardingProgress.Complete(_state.Api.Client.Home);
                 _pages.SelectedIndex = 0;
-                ShowNotice("配置完成。请重启 Codex 并新建对话，让插件和全局委派规则生效。凭据有效性以实际任务结果为准。", false);
+                ShowNotice("配置完成。" + (_codexStatus.TaskStartApproved ? "已保存启动任务授权。" : "尚未预授权启动任务，Codex 仍可能要求逐次确认。") +
+                    "请重启 Codex，审阅并信任 AgentDock 规则加载 hook，再新建对话。凭据有效性以实际任务结果为准。", false);
                 break;
         }
+    }
+
+    private async Task ConnectCodexAsync(bool authorize)
+    {
+        _codexStatus = await _codex.RegisterAsync(_state.Token);
+        if (authorize && !_codexStatus.TaskStartApproved)
+            _codexStatus = _codexStatus with { TaskStartApproved = await _codex.SetTaskApprovalAsync(true, _state.Token), ApprovalProblem = null };
+        _setupStep = 3;
     }
 
     private async Task RunSetupActionAsync(Func<Task> action)
@@ -158,7 +166,8 @@ public sealed partial class MainWindow
         var ready = SetupReadiness();
         for (var i = 0; i < 4; i++)
         {
-            _stepStates[i].Text = ready[i] ? i == 1 ? "已保存 · 待实际任务验证" : i == 2 ? "已注册并启用" : "已完成" : "待配置";
+            _stepStates[i].Text = ready[i] ? i == 1 ? "已保存 · 待实际任务验证" : i == 2 ?
+                (_codexStatus?.TaskStartApproved == true ? "已接入 · 已授权" : "已接入 · 待授权") : "已完成" : "待配置";
             _stepStates[i].Foreground = ready[i] ? Ui.Accent : Ui.Muted;
             _stepButtons[i].IsEnabled = !_setupBusy;
         }
@@ -167,7 +176,9 @@ public sealed partial class MainWindow
         _setupKey.IsEnabled = !_setupBusy;
         _setupBack.IsEnabled = !_setupBusy && _setupStep > 0;
         _setupSkip.IsEnabled = _setupRefresh.IsEnabled = !_setupBusy;
-        _setupNext.Content = new[] { ready[0] ? "继续" : "启动后台", "保存并继续", ready[2] ? "继续" : "接入 Codex 并继续", ready[3] ? "完成设置" : "启用全局委派并完成" }[_setupStep];
+        _setupNext.Content = new[] { ready[0] ? "继续" : "启动后台", "保存并继续",
+            _codexStatus?.TaskStartApproved == true ? "继续" : ready[2] ? "授权派发并继续" : "接入并授权",
+            ready[3] ? "完成设置" : "启用全局委派并完成" }[_setupStep];
     }
 
     private void RenderSetupBody(bool[] ready)
@@ -188,10 +199,21 @@ public sealed partial class MainWindow
                 if (!ready[0]) _setupBody.Children.Add(Hint("请先返回第 1 步启动后台。"));
                 break;
             case 2:
-                _setupBody.Children.Add(Ui.Text("让 Codex 找到 AgentDock", "sectionTitle"));
-                _setupBody.Children.Add(Hint("点击下方按钮注册并启用本机插件。完成后，重启 ChatGPT / Codex 桌面 App，再新建对话验证 AgentDock 工具。"));
-                _setupBody.Children.Add(Hint("此步骤通过 Codex 命令工具配置插件；日常仍在桌面 App 中使用。"));
+                _setupBody.Children.Add(Ui.Text("接入 Codex 并授权任务", "sectionTitle"));
+                _setupBody.Children.Add(Hint("授权范围：允许 Codex 通过 AgentDock 启动子任务（start_task），后续免逐次确认。任务会向已配置的模型渠道发送必要的任务内容、代码和脱敏证据，可能产生 API 费用；实现类任务可修改指定项目。"));
+                _setupBody.Children.Add(Hint("可选择仅接入并保留原审批方式，授权后也可恢复逐次询问。组织和项目限制仍有效；保存后请重启 Codex 并新建对话。"));
+                _setupBody.Children.Add(Hint("继续此步骤会刷新已安装的 AgentDock 插件。升级 AgentDock 后，请从此处重新接入以加载新增的规则 hook。"));
                 _setupBody.Children.Add(Hint(_codexStatus?.Message ?? (_codex.Executable is null ? "未找到 Codex，可选择已安装的程序文件。" : "已找到 Codex，点击接入或重新检查。")));
+                if (_codexStatus?.ApprovalProblem is { } approvalProblem) _setupBody.Children.Add(Hint(approvalProblem));
+                var approval = Ui.Button(_codexStatus?.TaskStartApproved == true ? "恢复逐次询问" : "仅接入，保留审批");
+                approval.IsEnabled = !_setupBusy;
+                approval.Click += async (_, _) => await RunSetupActionAsync(async () =>
+                {
+                    if (_codexStatus?.TaskStartApproved == true)
+                        _codexStatus = _codexStatus with { TaskStartApproved = await _codex.SetTaskApprovalAsync(false, _state.Token), ApprovalProblem = null };
+                    else await ConnectCodexAsync(authorize: false);
+                });
+                _setupBody.Children.Add(approval);
                 _setupBody.Children.Add(Hint("插件配置工具：" + (_codex.Executable ?? "未找到")));
                 var choose = Ui.Button(OperatingSystem.IsMacOS() ? "选择应用或 Codex 命令文件…" : "选择 Codex 程序…");
                 choose.IsEnabled = !_setupBusy;
@@ -221,6 +243,7 @@ public sealed partial class MainWindow
                 _setupBody.Children.Add(Hint("保留主模型及登录方式，架构判断仍用原生 architect。浏览器、桌面、应用操作和简单任务由主代理处理。遵守各项目限制，失败时不自动切换模型或重复派发。"));
                 _setupBody.Children.Add(Hint("规则位置：" + _routingStatus?.Path));
                 _setupBody.Children.Add(Hint("全局规则保留入口；委派细则和角色职责分别放在同目录的 AGENTDOCK.md、AGENT-ROLES.md。已有配套文档保持原样，缺失时创建，关闭委派后仍保留。"));
+                _setupBody.Children.Add(Hint("插件附带规则加载 hook，在聊天启动、恢复和压缩后读取这些规则；关闭委派后停止加载。首次请在 Codex「设置 → Hooks」审阅并信任（CLI 输入 /hooks）；同一插件版本可持续使用，插件升级或脚本变化后可能需要重新审阅。hook 不发起任务，也不替代第 3 步的任务授权。"));
                 if (_routingStatus?.Problem is { } problem) _setupBody.Children.Add(Hint(problem));
                 _setupBody.Children.Add(new Expander { Header = "查看默认入口与配套文档", Content = new TextBox { Text = GlobalRouting.Instructions + "\n\n--- AGENTDOCK.md ---\n\n" + GlobalRouting.DelegationInstructions + "\n\n--- AGENT-ROLES.md ---\n\n" + GlobalRouting.RoleInstructions, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 160 } });
                 _setupBody.Children.Add(Hint("生效方式：重启 Codex 并新建对话。项目规则仍可能限制委派；此处不会修改主模型、认证和其他规则。"));
